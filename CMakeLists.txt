@@ -1,10 +1,11 @@
 ﻿cmake_minimum_required(VERSION 3.14)
 
-set(HUNTER_PACKAGES Catch FakeIt)
+set(HUNTER_PACKAGES Catch FakeIt Boost)
 set(HUNTER_Catch_VERSION 2.11.0)
 set(HUNTER_FakeIt_VERSION 2.0.3)
+set(HUNTER_Boost_VERSION 1.75.0)
 
-set(HUNTER_NO_TOOLCHAIN_ID_RECALCULATION ON)
+#set(HUNTER_NO_TOOLCHAIN_ID_RECALCULATION ON)
 
 include(FetchContent)
 FetchContent_Declare(SetupHunter GIT_REPOSITORY https://github.com/cpp-pm/gate)
@@ -14,10 +15,11 @@ project ("TDDSeed")
 
 find_package(Catch2 CONFIG REQUIRED)
 find_package(FakeIt CONFIG REQUIRED)
+find_package(Boost CONFIG REQUIRED)
 
 add_executable (TDDSeed "sample_test.cpp" "main.cpp")
 
-target_link_libraries(TDDSeed PUBLIC Catch2::Catch2 FakeIt::FakeIt)
+target_link_libraries(TDDSeed PUBLIC Catch2::Catch2 FakeIt::FakeIt Boost::boost)
 
 target_compile_features(TDDSeed PUBLIC cxx_std_20)
 
