@@ -8,4 +8,4 @@ Frameworks: [Catch](https://github.com/catchorg/Catch2), [FakeIt](https://github
 
 Build: [CMake](https://cmake.org/) using [Hunter](https://hunter.readthedocs.io/en/latest/).
 
-Clone, build and work on any [Awesome Kata](https://github.com/gamontal/awesome-katas) to practice yourself or organiza a [Coding Dojo](https://codingdojo.org/WhatIsCodingDojo) with your friends.
+Clone, build and work on any [Awesome Kata](https://github.com/gamontal/awesome-katas) to practice yourself or organize a [Coding Dojo](https://codingdojo.org/WhatIsCodingDojo) with your friends.
