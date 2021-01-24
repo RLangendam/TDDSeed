@@ -1,5 +1,7 @@
 # TDDSeed
 
+[![Gitpod Ready-to-Code](https://img.shields.io/badge/Gitpod-ready--to--code-blue?logo=gitpod)](https://gitpod.io/#https://github.com/RLangendam/TDDSeed)
+
 TDDSeed is a [C++](https://en.wikipedia.org/wiki/C%2B%2B) seed for [test driven development](https://en.wikipedia.org/wiki/Test-driven_development).
 
 Frameworks: [Catch](https://github.com/catchorg/Catch2) and [FakeIt](https://github.com/eranpeer/FakeIt).
