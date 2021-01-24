@@ -430,3 +430,15 @@ MigrationBackup/
 
 /build/
 /out/
+/_*/
+
+DartConfiguration.tcl
+HunterConfig.cmake
+HunterConfig.cmake.in
+HunterSetup.cmake
+HunterSetup.cmake.in
+HunterToolchain.cmake
+HunterToolchain.cmake.in
+LatestGate.json
+TDDSeed_include-*.cmake
+hunter-v*.tar.gz
