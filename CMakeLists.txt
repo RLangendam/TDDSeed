@@ -1,8 +1,6 @@
 ﻿cmake_minimum_required(VERSION 3.14)
 
 set(HUNTER_PACKAGES Catch FakeIt)
-set(HUNTER_Catch_VERSION 2.11.0)
-set(HUNTER_FakeIt_VERSION 2.0.3)
 
 include(FetchContent)
 FetchContent_Declare(SetupHunter GIT_REPOSITORY https://github.com/cpp-pm/gate)
@@ -32,8 +30,12 @@ target_link_libraries(seed_test PUBLIC Catch2::Catch2 FakeIt::FakeIt seed_lib)
 target_compile_features(seed_test PUBLIC cxx_std_20)
 
 if(MSVC)
+  target_compile_options(seed_lib PRIVATE /W4 /WX)
+  target_compile_options(seed_app PRIVATE /W4 /WX)
   target_compile_options(seed_test PRIVATE /W4 /WX)
 else()
+  target_compile_options(seed_lib PRIVATE -Wall -Wextra -pedantic -Werror)
+  target_compile_options(seed_app PRIVATE -Wall -Wextra -pedantic -Werror)
   target_compile_options(seed_test PRIVATE -Wall -Wextra -pedantic -Werror)
 endif()
 
