@@ -1,8 +1,6 @@
 ﻿cmake_minimum_required(VERSION 3.14)
 
 set(HUNTER_PACKAGES Catch FakeIt)
-set(HUNTER_Catch_VERSION 2.11.0)
-set(HUNTER_FakeIt_VERSION 2.0.3)
 
 include(FetchContent)
 FetchContent_Declare(SetupHunter GIT_REPOSITORY https://github.com/cpp-pm/gate)
