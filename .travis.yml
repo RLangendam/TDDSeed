@@ -1,7 +1,6 @@
 language: cpp
-
-compiler:
-  - gcc
+dist: focal
+compiler: gcc
 
 install:
   - DEPS_DIR="${TRAVIS_BUILD_DIR}/deps"
