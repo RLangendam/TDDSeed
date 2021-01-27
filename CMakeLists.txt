@@ -1,11 +1,6 @@
 ﻿cmake_minimum_required(VERSION 3.14)
 
 set(HUNTER_PACKAGES Catch FakeIt Boost)
-set(HUNTER_Catch_VERSION 2.11.0)
-set(HUNTER_FakeIt_VERSION 2.0.3)
-set(HUNTER_Boost_VERSION 1.75.0)
-
-#set(HUNTER_NO_TOOLCHAIN_ID_RECALCULATION ON)
 
 include(FetchContent)
 FetchContent_Declare(SetupHunter GIT_REPOSITORY https://github.com/cpp-pm/gate)
