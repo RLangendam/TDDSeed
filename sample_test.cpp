@@ -1,6 +1,5 @@
-﻿#include <catch2/catch.hpp>
+﻿#include <gtest/gtest.h>
 
-TEST_CASE("sample")
-{
-	REQUIRE(true == true);
+TEST(Welcome, First) {
+  EXPECT_EQ(1, 1);
 }

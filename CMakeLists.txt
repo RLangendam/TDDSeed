@@ -1,6 +1,6 @@
 ﻿cmake_minimum_required(VERSION 3.14)
 
-set(HUNTER_PACKAGES Catch FakeIt)
+set(HUNTER_PACKAGES GTest)
 
 include(FetchContent)
 FetchContent_Declare(SetupHunter GIT_REPOSITORY https://github.com/cpp-pm/gate)
@@ -8,12 +8,11 @@ FetchContent_MakeAvailable(SetupHunter)
 
 project ("TDDSeed")
 
-find_package(Catch2 CONFIG REQUIRED)
-find_package(FakeIt CONFIG REQUIRED)
+find_package(GTest CONFIG REQUIRED)
 
-add_executable (TDDSeed "sample_test.cpp" "main.cpp")
+add_executable (TDDSeed "sample_test.cpp")
 
-target_link_libraries(TDDSeed PUBLIC Catch2::Catch2 FakeIt::FakeIt)
+target_link_libraries(TDDSeed PUBLIC GTest::gmock_main)
 
 target_compile_features(TDDSeed PUBLIC cxx_std_20)
 
@@ -24,5 +23,5 @@ else()
 endif()
 
 include(CTest)
-include(Catch)
-catch_discover_tests(TDDSeed)
+include(GoogleTest)
+gtest_add_tests(TARGET TDDSeed)
