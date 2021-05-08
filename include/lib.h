@@ -2,4 +2,7 @@
 
 #include <string>
 
-std::string function();
+char hex_to_char(char c);
+char char_to_hex(char c);
+std::string hex_to_base64(std::string const &hex);
+std::string hex_xor(std::string const &left, std::string const &right);

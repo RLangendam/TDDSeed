@@ -3,6 +3,5 @@
 
 int main()
 {
-    std::cout << function();
-    return 0;
+  return 0;
 }

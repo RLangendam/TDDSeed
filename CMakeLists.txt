@@ -1,6 +1,6 @@
 ﻿cmake_minimum_required(VERSION 3.14)
 
-set(HUNTER_PACKAGES Catch FakeIt Boost)
+set(HUNTER_PACKAGES Catch FakeIt Boost OpenSSL)
 
 include(FetchContent)
 FetchContent_Declare(SetupHunter GIT_REPOSITORY https://github.com/cpp-pm/gate)
@@ -11,10 +11,11 @@ project ("TDDSeed")
 find_package(Catch2 CONFIG REQUIRED)
 find_package(FakeIt CONFIG REQUIRED)
 find_package(Boost CONFIG REQUIRED)
+find_package(OpenSSL REQUIRED)
 
 add_library(lib "src/lib.cpp" "include/lib.h")
 
-target_link_libraries(lib PUBLIC Boost::boost)
+target_link_libraries(lib PUBLIC Boost::boost OpenSSL::Crypto)
 
 target_include_directories(lib PUBLIC "include")
 
