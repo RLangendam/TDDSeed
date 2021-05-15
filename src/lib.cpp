@@ -67,8 +67,9 @@ string hex_xor(string const &left, string const &right) {
   string result;
   range::transform(combine(left, right), back_inserter(result),
                    [](auto const &pair) {
-                     return char_to_hex(hex_to_char(pair.get<0>()) ^
-                                        hex_to_char(pair.get<1>()));
+                     char l, r;
+                     tie(l, r) = pair;
+                     return char_to_hex(hex_to_char(l) ^ hex_to_char(r));
                    });
   return result;
 }
