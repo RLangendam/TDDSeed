@@ -1,6 +1,8 @@
 ﻿#include <catch2/catch.hpp>
+#include <chrono>
 #include <iomanip>
 #include <iostream>
+#include <numeric>
 
 #include "lib.h"
 
@@ -22,9 +24,5 @@ SCENARIO("Challenge 1") {
     CHECK(message == "Cooking MC's like a pound of bacon");
     CHECK(key == 0x58);
   }
-  GIVEN("Set 4") {
-    auto const result{crack_file()};
-    CHECK(result.size() == 1);
-    CHECK(result.front() == "Now that the party is jumping\n");
-  }
+  GIVEN("Set 4") { CHECK(crack_file() == "Now that the party is jumping\n"); }
 }

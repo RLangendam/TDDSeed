@@ -5,10 +5,13 @@
 #include <boost/range/adaptor/sliced.hpp>
 #include <boost/range/adaptor/strided.hpp>
 #include <boost/range/adaptor/transformed.hpp>
+#include <boost/range/algorithm/copy.hpp>
 #include <boost/range/algorithm/transform.hpp>
 #include <boost/range/combine.hpp>
+#include <boost/range/istream_range.hpp>
 #include <boost/range/numeric.hpp>
 #include <cctype>
+#include <execution>
 #include <fstream>
 #include <iostream>
 #include <iterator>
@@ -74,8 +77,8 @@ string hex_to_base64(string const &hex) {
   return result;
 }
 
-std::string hex_to_string(std::string const &hex) {
-  std::stringstream stream;
+string hex_to_string(string const &hex) {
+  stringstream stream;
   unsigned char c{0};
   bool high{false};
   for (char each : hex) {
@@ -192,7 +195,7 @@ tuple<string, char> crack(string const &message) {
   return make_tuple(best_decrypted, best_key);
 }
 
-vector<string> crack_file() {
+string crack_file() {
   set<char> reference;
   reference.emplace('\n');
   reference.emplace(' ');
@@ -200,16 +203,25 @@ vector<string> crack_file() {
   for (char c{'A'}; c <= 'Z'; ++c) reference.emplace(c);
 
   ifstream file{"4.txt"};
-  string line;
-  vector<string> messages;
-  vector<char> difference;
-  while (getline(file, line)) {
-    auto [message, key] = crack(line);
-    set<char> chars{message.begin(), message.end()};
-    difference.clear();
-    set_difference(chars.begin(), chars.end(), reference.begin(),
-                   reference.end(), back_inserter(difference));
-    if (difference.empty()) messages.emplace_back(message);
-  }
-  return messages;
+
+  vector<string> encrypted_messages;
+  encrypted_messages.reserve(327);
+  boost::copy(boost::istream_range<string>(file),
+              back_inserter(encrypted_messages));
+
+  vector<string> decrypted_messages(encrypted_messages.size());
+  decrypted_messages.reserve(encrypted_messages.size());
+  transform(execution::par_unseq, encrypted_messages.begin(),
+            encrypted_messages.end(), decrypted_messages.begin(),
+            [](auto const &encrypted) { return get<0>(crack(encrypted)); });
+  return *find_if(execution::par_unseq, decrypted_messages.begin(),
+                  decrypted_messages.end(),
+                  [&reference = as_const(reference)](string const &decrypted) {
+                    set<char> const chars{decrypted.begin(), decrypted.end()};
+                    vector<char> difference;
+                    set_difference(chars.begin(), chars.end(),
+                                   reference.begin(), reference.end(),
+                                   back_inserter(difference));
+                    return difference.empty();
+                  });
 }

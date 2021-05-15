@@ -9,4 +9,4 @@ char char_to_hex(char c);
 std::string hex_to_base64(std::string const &hex);
 std::string hex_xor(std::string const &left, std::string const &right);
 std::tuple<std::string, char> crack(std::string const &message);
-std::vector<std::string> crack_file();
+std::string crack_file();
