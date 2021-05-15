@@ -33,6 +33,10 @@ TEST_CASE("set 1") {
                               "58585858585858585858",
                               "1b37373331363f78151b7f2b783431333d78397828372d36"
                               "3c78373e783a393b3736")));
+  auto const [message, key] = crack(
+      "1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736");
+  CHECK(message == "Cooking MC's like a pound of bacon");
+  CHECK(key == 0x58);
 }
 
 // TEST_CASE("inverses") {
