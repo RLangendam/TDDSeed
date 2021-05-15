@@ -11,34 +11,36 @@ project ("TDDSeed")
 find_package(Catch2 CONFIG REQUIRED)
 find_package(FakeIt CONFIG REQUIRED)
 
-add_library(seed_lib "src/lib.cpp" "include/lib.h")
+add_library(lib "src/lib.cpp" "include/lib.h")
 
-target_include_directories(seed_lib PUBLIC "include")
+target_include_directories(lib PUBLIC "include")
 
-add_executable(seed_app "src/main.cpp")
+add_executable(app "src/main.cpp")
 
-target_include_directories(seed_app PUBLIC "include")
+target_include_directories(app PUBLIC "include")
 
-target_link_libraries(seed_app PUBLIC seed_lib)
+target_link_libraries(app PUBLIC lib)
 
-add_executable (seed_test "test/sample_test.cpp" "test/main.cpp")
+add_executable (lib_test "test/sample_test.cpp" "test/main.cpp")
 
-target_include_directories(seed_test PUBLIC "include")
+target_include_directories(lib_test PUBLIC "include")
 
-target_link_libraries(seed_test PUBLIC Catch2::Catch2 FakeIt::FakeIt seed_lib)
+target_link_libraries(lib_test PUBLIC Catch2::Catch2 FakeIt::FakeIt lib)
 
-target_compile_features(seed_test PUBLIC cxx_std_20)
+target_compile_features(lib PUBLIC cxx_std_20)
+target_compile_features(app PUBLIC cxx_std_20)
+target_compile_features(lib_test PUBLIC cxx_std_20)
 
 if(MSVC)
-  target_compile_options(seed_lib PRIVATE /W4 /WX)
-  target_compile_options(seed_app PRIVATE /W4 /WX)
-  target_compile_options(seed_test PRIVATE /W4 /WX)
+  target_compile_options(lib PRIVATE /W4 /WX)
+  target_compile_options(app PRIVATE /W4 /WX)
+  target_compile_options(lib_test PRIVATE /W4 /WX)
 else()
-  target_compile_options(seed_lib PRIVATE -Wall -Wextra -pedantic -Werror)
-  target_compile_options(seed_app PRIVATE -Wall -Wextra -pedantic -Werror)
-  target_compile_options(seed_test PRIVATE -Wall -Wextra -pedantic -Werror)
+  target_compile_options(lib PRIVATE -Wall -Wextra -pedantic -Werror)
+  target_compile_options(app PRIVATE -Wall -Wextra -pedantic -Werror)
+  target_compile_options(lib_test PRIVATE -Wall -Wextra -pedantic -Werror)
 endif()
 
 include(CTest)
 include(Catch)
-catch_discover_tests(seed_test)
+catch_discover_tests(lib_test)
