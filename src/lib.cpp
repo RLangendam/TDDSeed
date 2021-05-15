@@ -12,6 +12,7 @@
 #include <fstream>
 #include <iostream>
 #include <iterator>
+#include <set>
 #include <sstream>
 #include <tuple>
 #include <unordered_map>
@@ -71,6 +72,23 @@ string hex_to_base64(string const &hex) {
       break;
   }
   return result;
+}
+
+std::string hex_to_string(std::string const &hex) {
+  std::stringstream stream;
+  unsigned char c{0};
+  bool high{false};
+  for (char each : hex) {
+    if (high) {
+      c |= hex_to_char(each);
+      stream << c;
+      high = false;
+    } else {
+      c = hex_to_char(each) << 4;
+      high = true;
+    }
+  }
+  return stream.str();
 }
 
 string hex_xor(string const &left, string const &right) {
@@ -144,10 +162,19 @@ size_t calculate_score(T const &left, T const &right) {
       [](auto const &l, auto const &r) { return get<1>(l) * get<1>(r); });
 }
 
-tuple<string, char> crack(string const &message) {
-  ifstream file{"english.txt"};
-  auto const reference{get_frequencies(file)};
+auto const &get_reference() {
+  static bool initialized{false};
+  static decltype(get_frequencies(declval<istream &>())) reference;
+  if (!initialized) {
+    ifstream file{"english.txt"};
+    reference = get_frequencies(file);
+    initialized = true;
+  }
+  return reference;
+}
 
+tuple<string, char> crack(string const &message) {
+  auto const &reference{get_reference()};
   string best_decrypted;
   size_t max_score{0};
   char best_key{0};
@@ -163,4 +190,26 @@ tuple<string, char> crack(string const &message) {
     }
   }
   return make_tuple(best_decrypted, best_key);
+}
+
+vector<string> crack_file() {
+  set<char> reference;
+  reference.emplace('\n');
+  reference.emplace(' ');
+  for (char c{'a'}; c <= 'z'; ++c) reference.emplace(c);
+  for (char c{'A'}; c <= 'Z'; ++c) reference.emplace(c);
+
+  ifstream file{"4.txt"};
+  string line;
+  vector<string> messages;
+  vector<char> difference;
+  while (getline(file, line)) {
+    auto [message, key] = crack(line);
+    set<char> chars{message.begin(), message.end()};
+    difference.clear();
+    set_difference(chars.begin(), chars.end(), reference.begin(),
+                   reference.end(), back_inserter(difference));
+    if (difference.empty()) messages.emplace_back(message);
+  }
+  return messages;
 }
