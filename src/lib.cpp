@@ -209,19 +209,43 @@ string crack_file() {
   boost::copy(boost::istream_range<string>(file),
               back_inserter(encrypted_messages));
 
-  vector<string> decrypted_messages(encrypted_messages.size());
-  decrypted_messages.reserve(encrypted_messages.size());
-  transform(execution::par_unseq, encrypted_messages.begin(),
-            encrypted_messages.end(), decrypted_messages.begin(),
-            [](auto const &encrypted) { return get<0>(crack(encrypted)); });
-  return *find_if(execution::par_unseq, decrypted_messages.begin(),
-                  decrypted_messages.end(),
-                  [&reference = as_const(reference)](string const &decrypted) {
-                    set<char> const chars{decrypted.begin(), decrypted.end()};
-                    vector<char> difference;
-                    set_difference(chars.begin(), chars.end(),
-                                   reference.begin(), reference.end(),
-                                   back_inserter(difference));
-                    return difference.empty();
-                  });
+  enum class state { unknown, discard, use };
+
+  return get<1>(transform_reduce(
+      execution::par, encrypted_messages.begin(), encrypted_messages.end(),
+      make_tuple(state::discard, string{}),
+      [&reference = as_const(reference)](tuple<state, string> &&left,
+                                         tuple<state, string> &&right) {
+        auto &[sl, ml] = left;
+        auto &[sr, mr] = right;
+        if (sl == state::discard || sr == state::use)
+          return right;
+        else if (sr == state::discard || sl == state::use)
+          return left;
+        else  // both sl and sr are state::unknown
+        {
+          vector<char> chars{ml.begin(), ml.end()};
+          sort(chars.begin(), chars.end());
+          chars.erase(unique(chars.begin(), chars.end()), chars.end());
+          vector<char> difference;
+          set_difference(chars.begin(), chars.end(), reference.begin(),
+                         reference.end(), back_inserter(difference));
+          if (difference.empty()) return make_tuple(state::use, move(ml));
+
+          chars.assign(mr.begin(), mr.end());
+          sort(chars.begin(), chars.end());
+          chars.erase(unique(chars.begin(), chars.end()), chars.end());
+          difference.clear();
+
+          set_difference(chars.begin(), chars.end(), reference.begin(),
+                         reference.end(), back_inserter(difference));
+          if (difference.empty())
+            return make_tuple(state::use, move(mr));
+          else
+            return make_tuple(state::discard, string{});
+        }
+      },
+      [](string const &encrypted) {
+        return make_tuple(state::unknown, move(get<0>(crack(encrypted))));
+      }));
 }
