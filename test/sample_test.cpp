@@ -24,19 +24,5 @@ SCENARIO("Challenge 1") {
     CHECK(message == "Cooking MC's like a pound of bacon");
     CHECK(key == 0x58);
   }
-  GIVEN("Set 4") {
-    std::string result;
-    std::vector<std::size_t> counts;
-    for (auto i{0}; i < 1; ++i) {
-      auto const before{std::chrono::high_resolution_clock::now()};
-      result = crack_file();
-      auto const after{std::chrono::high_resolution_clock::now()};
-      counts.emplace_back((after - before).count());
-    }
-    std::cout << "Cracking took: "
-              << std::accumulate(counts.begin(), counts.end(), 0.) /
-                     counts.size()
-              << "ns on average.\n";
-    CHECK(result == "Now that the party is jumping\n");
-  }
+  GIVEN("Set 4") { CHECK(crack_file() == "Now that the party is jumping\n"); }
 }
