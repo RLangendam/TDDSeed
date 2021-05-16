@@ -15,7 +15,11 @@ find_package(OpenSSL REQUIRED)
 
 add_library(lib "src/lib.cpp" "include/lib.h")
 
-target_link_libraries(lib PUBLIC Boost::boost OpenSSL::Crypto tbb)
+target_link_libraries(lib PUBLIC Boost::boost OpenSSL::Crypto)
+
+if (NOT MSVC)
+  target_link_libraries(lib PUBLIC tbb)
+endif()
 
 target_include_directories(lib PUBLIC "include")
 

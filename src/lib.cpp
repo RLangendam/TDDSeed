@@ -204,10 +204,8 @@ string crack_file() {
 
   ifstream file{"4.txt"};
 
-  vector<string> encrypted_messages;
-  encrypted_messages.reserve(327);
-  boost::copy(boost::istream_range<string>(file),
-              back_inserter(encrypted_messages));
+  array<string, 327> encrypted_messages;
+  boost::copy(boost::istream_range<string>(file), encrypted_messages.begin());
 
   enum class state { unknown, discard, use };
 
@@ -224,22 +222,19 @@ string crack_file() {
           return left;
         else  // both sl and sr are state::unknown
         {
-          vector<char> chars{ml.begin(), ml.end()};
-          sort(chars.begin(), chars.end());
-          chars.erase(unique(chars.begin(), chars.end()), chars.end());
-          vector<char> difference;
-          set_difference(chars.begin(), chars.end(), reference.begin(),
-                         reference.end(), back_inserter(difference));
-          if (difference.empty()) return make_tuple(state::use, move(ml));
-
-          chars.assign(mr.begin(), mr.end());
-          sort(chars.begin(), chars.end());
-          chars.erase(unique(chars.begin(), chars.end()), chars.end());
-          difference.clear();
-
-          set_difference(chars.begin(), chars.end(), reference.begin(),
-                         reference.end(), back_inserter(difference));
-          if (difference.empty())
+          auto const is_english{[&reference](string const &decrypted) {
+            thread_local vector<char> chars, difference;
+            chars.assign(decrypted.begin(), decrypted.end());
+            sort(chars.begin(), chars.end());
+            chars.erase(unique(chars.begin(), chars.end()), chars.end());
+            difference.clear();
+            set_difference(chars.begin(), chars.end(), reference.begin(),
+                           reference.end(), back_inserter(difference));
+            return difference.empty();
+          }};
+          if (is_english(ml))
+            return make_tuple(state::use, move(ml));
+          else if (is_english(mr))
             return make_tuple(state::use, move(mr));
           else
             return make_tuple(state::discard, string{});
