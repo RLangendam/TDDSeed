@@ -9,10 +9,13 @@
 #include <boost/range/algorithm/transform.hpp>
 #include <boost/range/combine.hpp>
 #include <boost/range/istream_range.hpp>
+#include <boost/range/iterator_range.hpp>
 #include <boost/range/numeric.hpp>
+#include <boost/stl_interfaces/iterator_interface.hpp>
 #include <cctype>
 #include <execution>
 #include <fstream>
+#include <iomanip>
 #include <iostream>
 #include <iterator>
 #include <set>
@@ -243,4 +246,48 @@ string crack_file() {
       [](string const &encrypted) {
         return make_tuple(state::unknown, move(get<0>(crack(encrypted))));
       }));
+}
+
+namespace {
+struct repeated_chars_iterator
+    : boost::stl_interfaces::iterator_interface<repeated_chars_iterator,
+                                                std::random_access_iterator_tag,
+                                                char, char> {
+  constexpr repeated_chars_iterator(string const &first) noexcept
+      : data(first) {}
+
+  char operator*() const noexcept { return data.at(index % data.size()); }
+  constexpr repeated_chars_iterator &operator+=(std::ptrdiff_t i) noexcept {
+    index += i;
+    return *this;
+  }
+  constexpr auto operator-(repeated_chars_iterator other) const noexcept {
+    return index - other.index;
+  }
+
+ private:
+  string const &data;
+  difference_type index{0};
+};
+
+}  // namespace
+
+string byte_to_hex(char byte) {
+  ostringstream stream;
+  stream << setw(2) << setfill('0') << hex << static_cast<int32_t>(byte);
+  return stream.str();
+}
+
+string encrypt(string const &message, string const &key) {
+  ostringstream stream;
+  using namespace boost;
+  range::transform(
+      combine(message, boost::make_iterator_range_n(
+                           repeated_chars_iterator{key}, message.size())),
+      ostream_iterator<string>(stream), [](auto const &pair) {
+        char l, r;
+        tie(l, r) = pair;
+        return byte_to_hex(l ^ r);
+      });
+  return stream.str();
 }
