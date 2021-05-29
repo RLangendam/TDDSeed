@@ -28,85 +28,161 @@
 using namespace std;
 
 char hex_to_char(char c) {
-  c = static_cast<char>(toupper(c));
-  if (c >= 'A' && c <= 'F') {
-    return 10 + c - 'A';
+  if (c >= 'a' && c <= 'f') {
+    return 10 + c - 'a';
   } else {
     return c - '0';
   }
 }
 
-char char_to_hex(char c) {
-  if (c > 9)
-    return c - 10 + 'A';
-  else
-    return c + '0';
+namespace {
+class hex_byte {
+ public:
+  static hex_byte from_char(char c) { return {c}; }
+  static hex_byte from_two_chars(char first, char second) {
+    return hex_byte{hex_to_char(first) * 0x10 + hex_to_char(second)};
+  }
+  static hex_byte from_pair_of_chars(boost::tuple<char, char> const &p) {
+    return from_two_chars(boost::get<0>(p), boost::get<1>(p));
+  }
+
+  auto get_byte() const { return byte; }
+
+  hex_byte operator^(hex_byte const &other) const {
+    return {byte ^ other.byte};
+  }
+
+ private:
+  hex_byte(char byte) : byte{byte} {}
+
+ private:
+  char byte;
+};
+
+template <typename E, typename T>
+basic_ostream<E, T> &operator<<(basic_ostream<E, T> &stream,
+                                hex_byte const &hb) {
+  return stream << setw(2) << setfill('0') << hex
+                << static_cast<int32_t>(hb.get_byte());
 }
 
-string hex_to_base64(string const &hex) {
-  static auto const base64{
-      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"};
-  string result;
-  uint16_t bits{0};
-  size_t bit_index{0};
-  for (auto c : hex) {
-    c = hex_to_char(c);
-    if (bit_index == 3) {
-      result.push_back(base64[bits >> 6]);
-      result.push_back(base64[bits & 0b111111]);
-      bit_index = 0;
-      bits = 0;
-    } else {
-      bits <<= 4;
-    }
-    bits |= c;
-    ++bit_index;
-  }
-  switch (bit_index) {
-    case 0:
-      break;
-    case 1:
-      result.push_back(base64[bits << 2]);
-      break;
-    case 2:
-      result.push_back(base64[bits >> 2]);
-      result.push_back(base64[(bits & 0b11) << 4]);
-      break;
-    case 3:
-      result.push_back(base64[bits >> 6]);
-      result.push_back(base64[bits & 0b111111]);
-      break;
-  }
-  return result;
-}
+struct repeated_chars_iterator
+    : boost::stl_interfaces::iterator_interface<repeated_chars_iterator,
+                                                std::random_access_iterator_tag,
+                                                char, char> {
+  constexpr repeated_chars_iterator(string const &first) noexcept
+      : data(first) {}
 
-string hex_to_string(string const &hex) {
-  stringstream stream;
-  unsigned char c{0};
-  bool high{false};
-  for (char each : hex) {
-    if (high) {
-      c |= hex_to_char(each);
-      stream << c;
-      high = false;
-    } else {
-      c = hex_to_char(each) << 4;
-      high = true;
-    }
+  char operator*() const noexcept { return data.at(index % data.size()); }
+  constexpr repeated_chars_iterator &operator+=(std::ptrdiff_t i) noexcept {
+    index += i;
+    return *this;
   }
+  constexpr auto operator-(repeated_chars_iterator other) const noexcept {
+    return index - other.index;
+  }
+
+ private:
+  string const &data;
+  difference_type index{0};
+};
+
+string stream_to_string(auto callable) {
+  ostringstream stream;
+  callable(stream);
   return stream.str();
 }
 
-string hex_xor(string const &left, string const &right) {
+auto to_hex_bytes(string const &message) {
   using namespace boost;
-  string result;
-  range::transform(combine(left, right), back_inserter(result),
-                   [](auto const &pair) {
-                     char l, r;
-                     tie(l, r) = pair;
-                     return char_to_hex(hex_to_char(l) ^ hex_to_char(r));
-                   });
-  return result;
+  using namespace range;
+  using namespace adaptors;
+  return combine(message | strided(2),
+                 message | sliced(1, message.size()) | strided(2)) |
+         transformed(hex_byte::from_pair_of_chars);
+}
+
+template <typename I>
+struct sextet_iterator
+    : boost::stl_interfaces::iterator_interface<
+          sextet_iterator<I>, forward_iterator_tag, char, char> {
+  constexpr sextet_iterator(I &&where) noexcept : where(where) {}
+
+  // char operator*() const noexcept {
+  //   if (bit_index == 0) {
+  //     return (*where & 0b11111100) >> 2;
+  //   } else if (bit_index == 2) {
+  //     return *where & 0b00111111;
+  //   } else if (bit_index == 4) {
+  //     char result = (*where & 0b00001111) << 2;
+  //     auto const n{boost::next(where)};
+  //     if (n != I{}) result |= (*n & 0b11000000) >> 6;
+  //     return result;
+  //   } else {  // bit_index == 6
+  //     char result = (*where & 0b00000011) << 4;
+  //     auto const n{boost::next(where)};
+  //     if (n != I{}) result |= (*n & 0b11110000) >> 4;
+  //     return result;
+  //   }
+  // }
+
+  char operator*() const noexcept {
+    if (bit_index < 3) {
+      return (*where & (0b11111100 >> bit_index)) >> (2 - bit_index);
+    } else {
+      constexpr auto high = 0b11111111;
+      char result = (*where & (high >> bit_index)) << (bit_index - 2);
+      auto const n{boost::next(where)};
+      if (n != I{}) {
+        auto const shift = 10 - bit_index;
+        result |= (*n & ((high << shift) & high)) >> shift;
+      }
+      return result;
+    }
+  }
+
+  constexpr sextet_iterator &operator+=(ptrdiff_t i) noexcept {
+    bit_index += 6 * i;
+    advance(where, bit_index / 8);
+    bit_index %= 8;
+    return *this;
+  }
+
+  constexpr auto operator-(sextet_iterator other) const noexcept {
+    return bit_index - other.bit_index;
+  }
+
+  bool operator==(sextet_iterator const &other) const {
+    return where == other.where && bit_index == other.bit_index;
+  }
+
+ private:
+  I where;
+  size_t bit_index{0};
+};
+
+template <typename T>
+auto as_sextets(T &&byte_range) {
+  using I = sextet_iterator<decltype(boost::begin(byte_range))>;
+  return boost::make_iterator_range(I{boost::begin(byte_range)},
+                                    I{boost::end(byte_range)});
+}
+}  // namespace
+
+string hex_to_base64(string const &hex) {
+  return stream_to_string([&](ostream &stream) {
+    using namespace boost;
+    using namespace range;
+    using namespace adaptors;
+    transform(as_sextets(to_hex_bytes(hex) |
+                         transformed(mem_fn(&hex_byte::get_byte))),
+              ostream_iterator<char>(stream), [](char sextet) {
+                static auto const base64{
+                    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz012345"
+                    "6789+/"};
+                return base64[sextet];
+              });
+  });
 }
 
 struct ci_hash {
@@ -138,27 +214,26 @@ auto get_frequencies(istream &stream) {
   return frequencies;
 }
 
-auto hex_to_bytes(string const &message) {
-  using namespace boost;
-  using namespace range;
-  using namespace adaptors;
-  return combine(message | strided(2),
-                 message | sliced(1, message.size()) | strided(2)) |
-         transformed([](auto const &chars) -> char {
-           char first, second;
-           tie(first, second) = chars;
-           return hex_to_char(first) * 16 + hex_to_char(second);
-         });
+string hex_xor(string const &left, string const &right) {
+  return stream_to_string([&](ostream &stream) {
+    using namespace boost;
+    range::transform(combine(to_hex_bytes(left), to_hex_bytes(right)),
+                     ostream_iterator<hex_byte>{stream}, [](auto const &p) {
+                       return boost::get<0>(p) ^ boost::get<1>(p);
+                     });
+  });
 }
 
 string decrypt(string const &message, char key) {
-  using namespace boost;
-  using namespace range;
-  using namespace adaptors;
-  string result;
-  transform(hex_to_bytes(message), back_inserter(result),
-            [key](char ch) -> char { return ch ^ key; });
-  return result;
+  return stream_to_string([&](ostream &stream) {
+    using namespace boost;
+    using namespace range;
+    using namespace adaptors;
+    transform(to_hex_bytes(message), ostream_iterator<char>(stream),
+              [key = hex_byte::from_char(key)](hex_byte ch) {
+                return (ch ^ key).get_byte();
+              });
+  });
 }
 
 template <typename T>
@@ -248,46 +323,16 @@ string crack_file() {
       }));
 }
 
-namespace {
-struct repeated_chars_iterator
-    : boost::stl_interfaces::iterator_interface<repeated_chars_iterator,
-                                                std::random_access_iterator_tag,
-                                                char, char> {
-  constexpr repeated_chars_iterator(string const &first) noexcept
-      : data(first) {}
-
-  char operator*() const noexcept { return data.at(index % data.size()); }
-  constexpr repeated_chars_iterator &operator+=(std::ptrdiff_t i) noexcept {
-    index += i;
-    return *this;
-  }
-  constexpr auto operator-(repeated_chars_iterator other) const noexcept {
-    return index - other.index;
-  }
-
- private:
-  string const &data;
-  difference_type index{0};
-};
-
-}  // namespace
-
-string byte_to_hex(char byte) {
-  ostringstream stream;
-  stream << setw(2) << setfill('0') << hex << static_cast<int32_t>(byte);
-  return stream.str();
-}
-
 string encrypt(string const &message, string const &key) {
-  ostringstream stream;
-  using namespace boost;
-  range::transform(
-      combine(message, boost::make_iterator_range_n(
-                           repeated_chars_iterator{key}, message.size())),
-      ostream_iterator<string>(stream), [](auto const &pair) {
-        char l, r;
-        tie(l, r) = pair;
-        return byte_to_hex(l ^ r);
-      });
-  return stream.str();
+  return stream_to_string([&](ostream &stream) {
+    using namespace boost;
+    range::transform(
+        combine(message, make_iterator_range_n(repeated_chars_iterator{key},
+                                               message.size())),
+        ostream_iterator<hex_byte>(stream), [](auto const &pair) {
+          char l, r;
+          tie(l, r) = pair;
+          return hex_byte::from_char(l ^ r);
+        });
+  });
 }
