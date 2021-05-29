@@ -67,14 +67,13 @@ basic_ostream<E, T> &operator<<(basic_ostream<E, T> &stream,
 }
 
 struct repeated_chars_iterator
-    : boost::stl_interfaces::iterator_interface<repeated_chars_iterator,
-                                                std::random_access_iterator_tag,
-                                                char, char> {
+    : boost::stl_interfaces::iterator_interface<
+          repeated_chars_iterator, random_access_iterator_tag, char, char> {
   constexpr repeated_chars_iterator(string const &first) noexcept
       : data(first) {}
 
   char operator*() const noexcept { return data.at(index % data.size()); }
-  constexpr repeated_chars_iterator &operator+=(std::ptrdiff_t i) noexcept {
+  constexpr repeated_chars_iterator &operator+=(ptrdiff_t i) noexcept {
     index += i;
     return *this;
   }
