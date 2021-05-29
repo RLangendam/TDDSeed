@@ -27,14 +27,6 @@
 
 using namespace std;
 
-char hex_to_char(char c) {
-  if (c >= 'a' && c <= 'f') {
-    return 10 + c - 'a';
-  } else {
-    return c - '0';
-  }
-}
-
 namespace {
 class hex_byte {
  public:
@@ -54,6 +46,14 @@ class hex_byte {
 
  private:
   hex_byte(char byte) : byte{byte} {}
+
+  static char hex_to_char(char c) {
+    if (c >= 'a' && c <= 'f') {
+      return 10 + c - 'a';
+    } else {
+      return c - '0';
+    }
+  }
 
  private:
   char byte;
@@ -102,43 +102,49 @@ auto to_hex_bytes(string const &message) {
          transformed(hex_byte::from_pair_of_chars);
 }
 
+class base64_sextet {
+ public:
+  static base64_sextet from_sextet(char sextet) { return {sextet}; }
+
+  char get_byte() const { return sextet; }
+
+ private:
+  base64_sextet(char sextet) : sextet{sextet} {}
+
+ private:
+  char sextet;
+};
+
+template <typename E, typename T>
+basic_ostream<E, T> &operator<<(basic_ostream<E, T> &stream,
+                                base64_sextet const &bs) {
+  static auto const base64{
+      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz012345"
+      "6789+/"};
+  return stream << base64[bs.get_byte()];
+}
+
 template <typename I>
 struct sextet_iterator
-    : boost::stl_interfaces::iterator_interface<
-          sextet_iterator<I>, forward_iterator_tag, char, char> {
+    : boost::stl_interfaces::iterator_interface<sextet_iterator<I>,
+                                                forward_iterator_tag,
+                                                base64_sextet, base64_sextet> {
   constexpr sextet_iterator(I &&where) noexcept : where(where) {}
 
-  // char operator*() const noexcept {
-  //   if (bit_index == 0) {
-  //     return (*where & 0b11111100) >> 2;
-  //   } else if (bit_index == 2) {
-  //     return *where & 0b00111111;
-  //   } else if (bit_index == 4) {
-  //     char result = (*where & 0b00001111) << 2;
-  //     auto const n{boost::next(where)};
-  //     if (n != I{}) result |= (*n & 0b11000000) >> 6;
-  //     return result;
-  //   } else {  // bit_index == 6
-  //     char result = (*where & 0b00000011) << 4;
-  //     auto const n{boost::next(where)};
-  //     if (n != I{}) result |= (*n & 0b11110000) >> 4;
-  //     return result;
-  //   }
-  // }
-
-  char operator*() const noexcept {
+  base64_sextet operator*() const noexcept {
+    char result;
     if (bit_index < 3) {
-      return (*where & (0b11111100 >> bit_index)) >> (2 - bit_index);
+      result = (*where & (0b11111100 >> bit_index)) >> (2 - bit_index);
     } else {
       constexpr auto high = 0b11111111;
-      char result = (*where & (high >> bit_index)) << (bit_index - 2);
+      result = (*where & (high >> bit_index)) << (bit_index - 2);
       auto const n{boost::next(where)};
       if (n != I{}) {
-        auto const shift = 10 - bit_index;
+        auto const shift{10 - bit_index};
         result |= (*n & ((high << shift) & high)) >> shift;
       }
-      return result;
     }
+    return base64_sextet::from_sextet(result);
   }
 
   constexpr sextet_iterator &operator+=(ptrdiff_t i) noexcept {
@@ -146,10 +152,6 @@ struct sextet_iterator
     advance(where, bit_index / 8);
     bit_index %= 8;
     return *this;
-  }
-
-  constexpr auto operator-(sextet_iterator other) const noexcept {
-    return bit_index - other.bit_index;
   }
 
   bool operator==(sextet_iterator const &other) const {
@@ -174,14 +176,9 @@ string hex_to_base64(string const &hex) {
     using namespace boost;
     using namespace range;
     using namespace adaptors;
-    transform(as_sextets(to_hex_bytes(hex) |
-                         transformed(mem_fn(&hex_byte::get_byte))),
-              ostream_iterator<char>(stream), [](char sextet) {
-                static auto const base64{
-                    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz012345"
-                    "6789+/"};
-                return base64[sextet];
-              });
+    copy(as_sextets(to_hex_bytes(hex) |
+                    transformed(mem_fn(&hex_byte::get_byte))),
+         ostream_iterator<base64_sextet>(stream));
   });
 }
 
