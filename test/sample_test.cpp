@@ -24,7 +24,7 @@ SCENARIO("Challenge 1") {
     CHECK(message == "Cooking MC's like a pound of bacon");
     CHECK(key == 0x58);
   }
-  GIVEN("Set 4") { CHECK(crack_file() == "Now that the party is jumping\n"); }
+  GIVEN("Set 4") { CHECK(crack_file_4() == "Now that the party is jumping\n"); }
   GIVEN("Set 5") {
     std::string const message{
         "Burning 'em, if you ain't quick and nimble\nI go crazy when "
@@ -35,5 +35,9 @@ SCENARIO("Challenge 1") {
           "2765272a282b2f20430a652e2c652a3124333a653e2b2"
           "027630c692b202831652863"
           "26302e27282f");
+  }
+  GIVEN("Set 6") {
+    CHECK(37 == hamming_distance("this is a test", "wokka wokka!!!"));
+    CHECK("" == crack_file_6());
   }
 }

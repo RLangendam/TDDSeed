@@ -37,6 +37,7 @@ target_link_libraries(lib_test PUBLIC Catch2::Catch2 FakeIt::FakeIt lib Boost::b
 
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/english.txt ${CMAKE_CURRENT_BINARY_DIR} COPYONLY)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/4.txt ${CMAKE_CURRENT_BINARY_DIR} COPYONLY)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/6.txt ${CMAKE_CURRENT_BINARY_DIR} COPYONLY)
 
 target_compile_features(lib PUBLIC cxx_std_20)
 target_compile_features(app PUBLIC cxx_std_20)

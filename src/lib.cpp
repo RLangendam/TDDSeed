@@ -2,12 +2,15 @@
 
 #include <algorithm>
 #include <array>
+#include <boost/range/adaptor/indexed.hpp>
 #include <boost/range/adaptor/sliced.hpp>
 #include <boost/range/adaptor/strided.hpp>
 #include <boost/range/adaptor/transformed.hpp>
 #include <boost/range/algorithm/copy.hpp>
+#include <boost/range/algorithm/for_each.hpp>
 #include <boost/range/algorithm/transform.hpp>
 #include <boost/range/combine.hpp>
+#include <boost/range/irange.hpp>
 #include <boost/range/istream_range.hpp>
 #include <boost/range/iterator_range.hpp>
 #include <boost/range/numeric.hpp>
@@ -30,6 +33,7 @@ using namespace std;
 namespace {
 class hex_byte {
  public:
+  hex_byte() = default;
   static hex_byte from_char(char c) { return {c}; }
   static hex_byte from_two_chars(char first, char second) {
     return hex_byte{hex_to_char(first) * 0x10 + hex_to_char(second)};
@@ -64,6 +68,14 @@ basic_ostream<E, T> &operator<<(basic_ostream<E, T> &stream,
                                 hex_byte const &hb) {
   return stream << setw(2) << setfill('0') << hex
                 << static_cast<int32_t>(hb.get_byte());
+}
+
+template <typename E, typename T>
+basic_istream<E, T> &operator>>(basic_istream<E, T> &stream, hex_byte &hb) {
+  char first, second;
+  stream >> first >> second;
+  hb = hex_byte::from_two_chars(first, second);
+  return stream;
 }
 
 struct repeated_chars_iterator
@@ -103,6 +115,7 @@ auto to_hex_bytes(string const &message) {
 
 class base64_sextet {
  public:
+  base64_sextet() = default;
   static base64_sextet from_sextet(char sextet) { return {sextet}; }
 
   char get_byte() const { return sextet; }
@@ -114,13 +127,25 @@ class base64_sextet {
   char sextet;
 };
 
+static string const base64_lookup{
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz012345"
+    "6789+/"};
+
 template <typename E, typename T>
 basic_ostream<E, T> &operator<<(basic_ostream<E, T> &stream,
                                 base64_sextet const &bs) {
-  static auto const base64{
-      "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz012345"
-      "6789+/"};
-  return stream << base64[bs.get_byte()];
+  return stream << base64_lookup[bs.get_byte()];
+}
+
+template <typename E, typename T>
+basic_istream<E, T> &operator>>(basic_istream<E, T> &stream,
+                                base64_sextet &bs) {
+  char letter;
+  stream >> letter;
+  bs = base64_sextet::from_sextet(static_cast<char>(
+      distance(base64_lookup.begin(),
+               find(base64_lookup.begin(), base64_lookup.end(), letter))));
+  return stream;
 }
 
 template <typename I>
@@ -167,6 +192,53 @@ auto as_sextets(T &&byte_range) {
   using I = sextet_iterator<decltype(boost::begin(byte_range))>;
   return boost::make_iterator_range(I{boost::begin(byte_range)},
                                     I{boost::end(byte_range)});
+}
+
+template <typename I>
+struct octet_iterator
+    : boost::stl_interfaces::iterator_interface<
+          octet_iterator<I>, forward_iterator_tag, char, char> {
+  constexpr octet_iterator(I &&where) noexcept : where(where) {}
+
+  char operator*() const noexcept {
+    char result;
+    if (bit_index == 0) {
+      result = where->get_byte() << 2;
+      auto const n{boost::next(where)};
+      if (n != I{}) result |= (n->get_byte() & 0b110000) >> 4;
+    } else if (bit_index == 2) {
+      result = (where->get_byte() & 0b001111) << 4;
+      auto const n{boost::next(where)};
+      if (n != I{}) result |= (n->get_byte() & 0b111100) >> 2;
+    } else {  // bit_index == 4
+      result = (where->get_byte() & 0b000011) << 6;
+      auto const n{boost::next(where)};
+      if (n != I{}) result |= n->get_byte();
+    }
+    return result;
+  }
+
+  constexpr octet_iterator &operator+=(ptrdiff_t i) noexcept {
+    bit_index += 8 * i;
+    advance(where, bit_index / 6);
+    bit_index %= 6;
+    return *this;
+  }
+
+  bool operator==(octet_iterator const &other) const {
+    return where == other.where && bit_index == other.bit_index;
+  }
+
+ private:
+  I where;
+  size_t bit_index{0};
+};
+
+template <typename T>
+auto as_octets(T &&sextet_range) {
+  using I = octet_iterator<decltype(boost::begin(sextet_range))>;
+  return boost::make_iterator_range(I{boost::begin(sextet_range)},
+                                    I{boost::end(sextet_range)});
 }
 }  // namespace
 
@@ -269,25 +341,25 @@ tuple<string, char> crack(string const &message) {
   return make_tuple(best_decrypted, best_key);
 }
 
-string crack_file() {
-  set<char> reference;
-  reference.emplace('\n');
-  reference.emplace(' ');
-  for (char c{'a'}; c <= 'z'; ++c) reference.emplace(c);
-  for (char c{'A'}; c <= 'Z'; ++c) reference.emplace(c);
+set<char> const &get_word_characters() {
+  static set<char> reference;
+  static bool initialized{false};
+  if (!initialized) {
+    reference.emplace('\n');
+    reference.emplace(' ');
+    for (char c{'a'}; c <= 'z'; ++c) reference.emplace(c);
+    for (char c{'A'}; c <= 'Z'; ++c) reference.emplace(c);
+  }
+  return reference;
+}
 
-  ifstream file{"4.txt"};
-
-  array<string, 327> encrypted_messages;
-  boost::copy(boost::istream_range<string>(file), encrypted_messages.begin());
-
+string crack_messages(auto const &encrypted_messages) {
   enum class state { unknown, discard, use };
 
   return get<1>(transform_reduce(
       execution::par, encrypted_messages.begin(), encrypted_messages.end(),
       make_tuple(state::discard, string{}),
-      [&reference = as_const(reference)](tuple<state, string> &&left,
-                                         tuple<state, string> &&right) {
+      [](tuple<state, string> &&left, tuple<state, string> &&right) {
         auto &[sl, ml] = left;
         auto &[sr, mr] = right;
         if (sl == state::discard || sr == state::use)
@@ -296,12 +368,13 @@ string crack_file() {
           return left;
         else  // both sl and sr are state::unknown
         {
-          auto const is_english{[&reference](string const &decrypted) {
+          auto const is_english{[](string const &decrypted) {
             thread_local vector<char> chars, difference;
             chars.assign(decrypted.begin(), decrypted.end());
             sort(chars.begin(), chars.end());
             chars.erase(unique(chars.begin(), chars.end()), chars.end());
             difference.clear();
+            auto const &reference{get_word_characters()};
             set_difference(chars.begin(), chars.end(), reference.begin(),
                            reference.end(), back_inserter(difference));
             return difference.empty();
@@ -319,6 +392,15 @@ string crack_file() {
       }));
 }
 
+string crack_file_4() {
+  ifstream file{"4.txt"};
+
+  array<string, 327> encrypted_messages;
+  boost::copy(boost::istream_range<string>(file), encrypted_messages.begin());
+
+  return crack_messages(encrypted_messages);
+}
+
 string encrypt(string const &message, string const &key) {
   return stream_to_string([&](ostream &stream) {
     using namespace boost;
@@ -331,4 +413,62 @@ string encrypt(string const &message, string const &key) {
           return hex_byte::from_char(l ^ r);
         });
   });
+}
+
+size_t hamming_distance_impl(string_view const &left,
+                             string_view const &right) {
+  return boost::inner_product(
+      left, right, 0ull, plus<size_t>{},
+      [](char l, char r) { return popcount(static_cast<uint8_t>(l ^ r)); });
+}
+
+size_t hamming_distance(string const &left, string const &right) {
+  return hamming_distance_impl(left, right);
+}
+
+string crack_file_6() {
+  ostringstream stream;
+  {
+    ifstream file{"6.txt"};
+    boost::copy(as_octets(boost::istream_range<base64_sextet>(file)),
+                ostream_iterator<char>(stream));
+  }
+  auto const encrypted{stream.str()};
+  vector<tuple<float, size_t>> key_sizes(40);
+  boost::range::for_each(
+      key_sizes | boost::adaptors::indexed(2), [&encrypted](auto const &proxy) {
+        auto &[average_distance, key_size] = proxy.value() =
+            make_tuple(0.f, proxy.index());
+        size_t count{0};
+        for (size_t i{0}; i < 5; ++i)
+          for (size_t j{i}; j < 5; ++j) {
+            average_distance +=
+                hamming_distance_impl(
+                    string_view{next(encrypted.begin(), key_size * i),
+                                next(encrypted.begin(), key_size * (i + 1))},
+                    string_view{next(encrypted.begin(), key_size * j),
+                                next(encrypted.begin(), key_size * (j + 1))}) /
+                static_cast<float>(key_size);
+            ++count;
+          }
+        average_distance /= count;
+      });
+  sort(key_sizes.begin(), key_sizes.end());
+  auto const best_key_size{get<1>(key_sizes.front())};
+  vector<string> blocks;
+  blocks.reserve(encrypted.size() / best_key_size + 1);
+  boost::transform(
+      boost::irange(best_key_size), back_inserter(blocks),
+      [&encrypted, best_key_size](size_t slice) {
+        return stream_to_string(
+            [&encrypted, slice, best_key_size](ostream &stream) {
+              boost::copy(encrypted |
+                              boost::adaptors::sliced(slice, encrypted.size()) |
+                              boost::adaptors::strided(best_key_size),
+                          ostream_iterator<char>(stream));
+            });
+      });
+  for (auto &block : blocks)
+    if (block.size() % 2) block.push_back(' ');
+  return crack_messages(blocks);
 }
