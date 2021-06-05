@@ -13,6 +13,7 @@
 #include <boost/range/irange.hpp>
 #include <boost/range/istream_range.hpp>
 #include <boost/range/iterator_range.hpp>
+#include <boost/range/join.hpp>
 #include <boost/range/numeric.hpp>
 #include <boost/stl_interfaces/iterator_interface.hpp>
 #include <cctype>
@@ -21,6 +22,7 @@
 #include <iomanip>
 #include <iostream>
 #include <iterator>
+#include <ranges>
 #include <set>
 #include <sstream>
 #include <tuple>
@@ -31,70 +33,51 @@
 using namespace std;
 
 namespace {
-class hex_byte {
- public:
-  hex_byte() = default;
-  static hex_byte from_char(char c) { return {c}; }
-  static hex_byte from_two_chars(char first, char second) {
-    return hex_byte{hex_to_char(first) * 0x10 + hex_to_char(second)};
+static char hex_to_char(char c) {
+  if (c >= 'a' && c <= 'f') {
+    return 10 + c - 'a';
+  } else {
+    return c - '0';
   }
-  static hex_byte from_pair_of_chars(boost::tuple<char, char> const &p) {
-    return from_two_chars(boost::get<0>(p), boost::get<1>(p));
-  }
+}
 
-  auto get_byte() const { return byte; }
-
-  hex_byte operator^(hex_byte const &other) const {
-    return {byte ^ other.byte};
-  }
-
- private:
-  hex_byte(char byte) : byte{byte} {}
-
-  static char hex_to_char(char c) {
-    if (c >= 'a' && c <= 'f') {
-      return 10 + c - 'a';
-    } else {
-      return c - '0';
-    }
-  }
-
- private:
-  char byte;
+template <typename T, int W>
+struct fixed_width_value {
+  fixed_width_value(T v_) : v(v_) {}
+  T v;
 };
 
-template <typename E, typename T>
-basic_ostream<E, T> &operator<<(basic_ostream<E, T> &stream,
-                                hex_byte const &hb) {
-  return stream << setw(2) << setfill('0') << hex
-                << static_cast<int32_t>(hb.get_byte());
+template <typename T, int W>
+ostream &operator<<(ostream &ostr, const fixed_width_value<T, W> &fwv) {
+  return ostr << setw(W) << fwv.v;
 }
 
 template <typename E, typename T>
-basic_istream<E, T> &operator>>(basic_istream<E, T> &stream, hex_byte &hb) {
-  char first, second;
-  stream >> first >> second;
-  hb = hex_byte::from_two_chars(first, second);
-  return stream;
+basic_ostream<E, T> &hex_encoding(basic_ostream<E, T> &stream) {
+  return stream << setfill('0') << hex;
 }
 
-struct repeated_chars_iterator
+auto hex_output_iterator(auto &stream) {
+  return ostream_iterator<fixed_width_value<int, 2>>{stream << hex_encoding};
+}
+
+struct repeated_iterator
     : boost::stl_interfaces::iterator_interface<
-          repeated_chars_iterator, random_access_iterator_tag, char, char> {
-  constexpr repeated_chars_iterator(string const &first) noexcept
+          repeated_iterator, random_access_iterator_tag, byte, byte> {
+  constexpr repeated_iterator(vector<byte> const &first) noexcept
       : data(first) {}
 
-  char operator*() const noexcept { return data.at(index % data.size()); }
-  constexpr repeated_chars_iterator &operator+=(ptrdiff_t i) noexcept {
+  byte operator*() const noexcept { return data.at(index % data.size()); }
+  constexpr repeated_iterator &operator+=(ptrdiff_t i) noexcept {
     index += i;
     return *this;
   }
-  constexpr auto operator-(repeated_chars_iterator other) const noexcept {
+  constexpr auto operator-(repeated_iterator other) const noexcept {
     return index - other.index;
   }
 
  private:
-  string const &data;
+  vector<byte> const &data;
   difference_type index{0};
 };
 
@@ -104,27 +87,38 @@ string stream_to_string(auto callable) {
   return stream.str();
 }
 
-auto to_hex_bytes(string const &message) {
+auto hex_decoded(string const &message) {
   using namespace boost;
   using namespace range;
   using namespace adaptors;
-  return combine(message | strided(2),
-                 message | sliced(1, message.size()) | strided(2)) |
-         transformed(hex_byte::from_pair_of_chars);
+  return combine(
+             message | strided(2),
+             join(message, message.size() % 2 ? string{} : string(1, '\0')) |
+                 sliced(1, message.size() + (message.size() % 2)) |
+                 strided(2)) |
+         transformed([](boost::tuple<char, char> const &p) -> byte {
+           return static_cast<byte>(hex_to_char(boost::get<0>(p)) * 0x10 +
+                                    hex_to_char(boost::get<1>(p)));
+         });
+}
+
+auto as_bytes(string const &message) {
+  return message | boost::adaptors::transformed(
+                       [](char c) { return static_cast<byte>(c); });
 }
 
 class base64_sextet {
  public:
   base64_sextet() = default;
-  static base64_sextet from_sextet(char sextet) { return {sextet}; }
+  static base64_sextet from_sextet(byte sextet) { return {sextet}; }
 
-  char get_byte() const { return sextet; }
-
- private:
-  base64_sextet(char sextet) : sextet{sextet} {}
+  byte get_byte() const { return sextet; }
 
  private:
-  char sextet;
+  base64_sextet(byte sextet) : sextet{sextet} {}
+
+ private:
+  byte sextet;
 };
 
 static string const base64_lookup{
@@ -134,7 +128,7 @@ static string const base64_lookup{
 template <typename E, typename T>
 basic_ostream<E, T> &operator<<(basic_ostream<E, T> &stream,
                                 base64_sextet const &bs) {
-  return stream << base64_lookup[bs.get_byte()];
+  return stream << base64_lookup[to_integer<size_t>(bs.get_byte())];
 }
 
 template <typename E, typename T>
@@ -142,9 +136,11 @@ basic_istream<E, T> &operator>>(basic_istream<E, T> &stream,
                                 base64_sextet &bs) {
   char letter;
   stream >> letter;
-  bs = base64_sextet::from_sextet(static_cast<char>(
-      distance(base64_lookup.begin(),
-               find(base64_lookup.begin(), base64_lookup.end(), letter))));
+  auto const found{find(base64_lookup.begin(), base64_lookup.end(), letter)};
+  if (found == base64_lookup.end())
+    throw out_of_range{"Letter cannot be base64 decoded"};
+  bs = base64_sextet::from_sextet(
+      static_cast<byte>(distance(base64_lookup.begin(), found)));
   return stream;
 }
 
@@ -154,18 +150,21 @@ struct sextet_iterator
                                                 forward_iterator_tag,
                                                 base64_sextet, base64_sextet> {
   constexpr sextet_iterator(I &&where) noexcept : where(where) {}
+  constexpr sextet_iterator(I &&where, I &&end) noexcept
+      : where(where), end(end) {}
 
   base64_sextet operator*() const noexcept {
-    char result;
+    byte result;
     if (bit_index < 3) {
-      result = (*where & (0b11111100 >> bit_index)) >> (2 - bit_index);
+      result = (*where & (byte{0b11111100} >> bit_index)) >> (2 - bit_index);
     } else {
       constexpr auto high = 0b11111111;
-      result = (*where & (high >> bit_index)) << (bit_index - 2);
+      result = (*where & static_cast<byte>(high >> bit_index))
+               << (bit_index - 2);
       auto const n{boost::next(where)};
-      if (n != I{}) {
+      if (n != end) {
         auto const shift{10 - bit_index};
-        result |= (*n & ((high << shift) & high)) >> shift;
+        result |= (*n & static_cast<byte>((high << shift) & high)) >> shift;
       }
     }
     return base64_sextet::from_sextet(result);
@@ -184,36 +183,40 @@ struct sextet_iterator
 
  private:
   I where;
+  I end;
   size_t bit_index{0};
 };
 
 template <typename T>
 auto as_sextets(T &&byte_range) {
   using I = sextet_iterator<decltype(boost::begin(byte_range))>;
-  return boost::make_iterator_range(I{boost::begin(byte_range)},
-                                    I{boost::end(byte_range)});
+  return boost::make_iterator_range(
+      I{boost::begin(byte_range), boost::end(byte_range)},
+      I{boost::end(byte_range)});
 }
 
 template <typename I>
 struct octet_iterator
     : boost::stl_interfaces::iterator_interface<
-          octet_iterator<I>, forward_iterator_tag, char, char> {
+          octet_iterator<I>, forward_iterator_tag, byte, byte> {
   constexpr octet_iterator(I &&where) noexcept : where(where) {}
+  constexpr octet_iterator(I &&where, I &&end) noexcept
+      : where(where), end(end) {}
 
-  char operator*() const noexcept {
-    char result;
+  byte operator*() const noexcept {
+    byte result;
     if (bit_index == 0) {
       result = where->get_byte() << 2;
       auto const n{boost::next(where)};
-      if (n != I{}) result |= (n->get_byte() & 0b110000) >> 4;
+      if (n != end) result |= (n->get_byte() & byte{0b110000}) >> 4;
     } else if (bit_index == 2) {
-      result = (where->get_byte() & 0b001111) << 4;
+      result = (where->get_byte() & byte{0b001111}) << 4;
       auto const n{boost::next(where)};
-      if (n != I{}) result |= (n->get_byte() & 0b111100) >> 2;
+      if (n != end) result |= (n->get_byte() & byte{0b111100}) >> 2;
     } else {  // bit_index == 4
-      result = (where->get_byte() & 0b000011) << 6;
+      result = (where->get_byte() & byte{0b000011}) << 6;
       auto const n{boost::next(where)};
-      if (n != I{}) result |= n->get_byte();
+      if (n != end) result |= n->get_byte();
     }
     return result;
   }
@@ -231,14 +234,16 @@ struct octet_iterator
 
  private:
   I where;
+  I end;
   size_t bit_index{0};
 };
 
 template <typename T>
 auto as_octets(T &&sextet_range) {
   using I = octet_iterator<decltype(boost::begin(sextet_range))>;
-  return boost::make_iterator_range(I{boost::begin(sextet_range)},
-                                    I{boost::end(sextet_range)});
+  return boost::make_iterator_range(
+      I{boost::begin(sextet_range), boost::end(sextet_range)},
+      I{boost::end(sextet_range)});
 }
 }  // namespace
 
@@ -247,9 +252,7 @@ string hex_to_base64(string const &hex) {
     using namespace boost;
     using namespace range;
     using namespace adaptors;
-    copy(as_sextets(to_hex_bytes(hex) |
-                    transformed(mem_fn(&hex_byte::get_byte))),
-         ostream_iterator<base64_sextet>(stream));
+    copy(as_sextets(hex_decoded(hex)), ostream_iterator<base64_sextet>(stream));
   });
 }
 
@@ -285,10 +288,11 @@ auto get_frequencies(istream &stream) {
 string hex_xor(string const &left, string const &right) {
   return stream_to_string([&](ostream &stream) {
     using namespace boost;
-    range::transform(combine(to_hex_bytes(left), to_hex_bytes(right)),
-                     ostream_iterator<hex_byte>{stream}, [](auto const &p) {
-                       return boost::get<0>(p) ^ boost::get<1>(p);
-                     });
+    range::transform(
+        combine(hex_decoded(left), hex_decoded(right)),
+        hex_output_iterator(stream), [](auto const &p) {
+          return to_integer<int>(boost::get<0>(p) ^ boost::get<1>(p));
+        });
   });
 }
 
@@ -297,9 +301,9 @@ string decrypt(string const &message, char key) {
     using namespace boost;
     using namespace range;
     using namespace adaptors;
-    transform(to_hex_bytes(message), ostream_iterator<char>(stream),
-              [key = hex_byte::from_char(key)](hex_byte ch) {
-                return (ch ^ key).get_byte();
+    transform(hex_decoded(message), ostream_iterator<char>(stream),
+              [key = static_cast<byte>(key)](byte ch) {
+                return to_integer<char>(ch ^ key);
               });
   });
 }
@@ -404,36 +408,88 @@ string crack_file_4() {
 string encrypt(string const &message, string const &key) {
   return stream_to_string([&](ostream &stream) {
     using namespace boost;
+    auto const key_bytes{to_bytes(key)};
     range::transform(
-        combine(message, make_iterator_range_n(repeated_chars_iterator{key},
-                                               message.size())),
-        ostream_iterator<hex_byte>(stream), [](auto const &pair) {
-          char l, r;
-          tie(l, r) = pair;
-          return hex_byte::from_char(l ^ r);
+        combine(as_bytes(message),
+                make_iterator_range_n(repeated_iterator{key_bytes},
+                                      message.size())),
+        hex_output_iterator(stream), [](boost::tuple<byte, byte> const &p) {
+          return to_integer<int>(boost::get<0>(p) ^ boost::get<1>(p));
         });
   });
 }
 
-size_t hamming_distance_impl(string_view const &left,
-                             string_view const &right) {
+template <typename R1, typename R2>
+size_t hamming_distance_impl(R1 const &left, R2 const &right) {
   return boost::inner_product(
       left, right, 0ull, plus<size_t>{},
-      [](char l, char r) { return popcount(static_cast<uint8_t>(l ^ r)); });
+      [](byte l, byte r) { return popcount(to_integer<uint8_t>(l ^ r)); });
 }
 
 size_t hamming_distance(string const &left, string const &right) {
-  return hamming_distance_impl(left, right);
+  return hamming_distance_impl(left | boost::adaptors::transformed([](char c) {
+                                 return static_cast<byte>(c);
+                               }),
+                               right | boost::adaptors::transformed([](char c) {
+                                 return static_cast<byte>(c);
+                               }));
+}
+
+vector<byte> to_bytes(string const &message) {
+  vector<byte> bytes;
+  bytes.reserve(message.size());
+  boost::range::transform(message, back_inserter(bytes),
+                          [](char c) { return static_cast<byte>(c); });
+  return bytes;
+}
+
+string from_bytes(vector<byte> const &bytes) {
+  return stream_to_string([&](ostream &stream) {
+    boost::range::transform(bytes, ostream_iterator<char>(stream),
+                            [](byte b) { return static_cast<char>(b); });
+  });
+}
+
+string to_hex(vector<byte> const &bytes) {
+  return stream_to_string([&](ostream &stream) {
+    boost::range::transform(bytes, hex_output_iterator(stream),
+                            &to_integer<int>);
+  });
+}
+
+vector<byte> from_hex(string const &message) {
+  vector<byte> bytes;
+  bytes.reserve(message.size() / 2);
+  boost::range::copy(hex_decoded(message), back_inserter(bytes));
+  return bytes;
+}
+
+string to_base64(vector<byte> const &bytes) {
+  return stream_to_string([&](ostream &stream) {
+    boost::range::copy(as_sextets(bytes),
+                       ostream_iterator<base64_sextet>(stream));
+  });
+}
+
+auto from_base64_impl(auto &stream) {
+  vector<byte> bytes;
+
+  boost::range::copy(as_octets(boost::istream_range<base64_sextet>(stream)),
+                     back_inserter(bytes));
+  return bytes;
+}
+
+vector<byte> from_base64(string const &message) {
+  istringstream stream{message};
+  return from_base64_impl(stream);
 }
 
 string crack_file_6() {
-  ostringstream stream;
+  vector<byte> encrypted;
   {
     ifstream file{"6.txt"};
-    boost::copy(as_octets(boost::istream_range<base64_sextet>(file)),
-                ostream_iterator<char>(stream));
+    encrypted = from_base64_impl(file);
   }
-  auto const encrypted{stream.str()};
   vector<tuple<float, size_t>> key_sizes(40);
   boost::range::for_each(
       key_sizes | boost::adaptors::indexed(2), [&encrypted](auto const &proxy) {
@@ -444,10 +500,12 @@ string crack_file_6() {
           for (size_t j{i}; j < 5; ++j) {
             average_distance +=
                 hamming_distance_impl(
-                    string_view{next(encrypted.begin(), key_size * i),
-                                next(encrypted.begin(), key_size * (i + 1))},
-                    string_view{next(encrypted.begin(), key_size * j),
-                                next(encrypted.begin(), key_size * (j + 1))}) /
+                    boost::make_iterator_range(
+                        next(encrypted.begin(), key_size * i),
+                        next(encrypted.begin(), key_size * (i + 1))),
+                    boost::make_iterator_range(
+                        next(encrypted.begin(), key_size * j),
+                        next(encrypted.begin(), key_size * (j + 1)))) /
                 static_cast<float>(key_size);
             ++count;
           }
@@ -462,10 +520,10 @@ string crack_file_6() {
       [&encrypted, best_key_size](size_t slice) {
         return stream_to_string(
             [&encrypted, slice, best_key_size](ostream &stream) {
-              boost::copy(encrypted |
-                              boost::adaptors::sliced(slice, encrypted.size()) |
-                              boost::adaptors::strided(best_key_size),
-                          ostream_iterator<char>(stream));
+              boost::transform(
+                  encrypted | boost::adaptors::sliced(slice, encrypted.size()) |
+                      boost::adaptors::strided(best_key_size),
+                  ostream_iterator<char>(stream), &to_integer<char>);
             });
       });
   for (auto &block : blocks)
