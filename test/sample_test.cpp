@@ -3,8 +3,40 @@
 #include <iomanip>
 #include <iostream>
 #include <numeric>
+#include <string_view>
 
 #include "lib.h"
+
+namespace std {
+
+template <typename E, typename T>
+basic_ostream<E, T>& operator<<(basic_ostream<E, T>& stream, byte b) {
+  return stream << to_integer<int>(b);
+}
+
+template <typename E, typename T, typename X>
+basic_ostream<E, T>& operator<<(basic_ostream<E, T>& stream,
+                                vector<X> const& v) {
+  for (auto x : v) stream << x << ", ";
+  return stream;
+}
+
+template <typename C, typename E, class TupType, size_t... I>
+void print(basic_ostream<C, E>& stream, const TupType& _tup,
+           index_sequence<I...>) {
+  stream << "(";
+  (..., (stream << (I == 0 ? "" : ", ") << get<I>(_tup)));
+  stream << ")\n";
+}
+
+template <typename C, typename E, typename... T>
+basic_ostream<C, E>& operator<<(basic_ostream<C, E>& stream,
+                                const tuple<T...>& _tup) {
+  print(stream, _tup, make_index_sequence<sizeof...(T)>());
+  return stream;
+}
+
+}  // namespace std
 
 SCENARIO("Challenge 1") {
   GIVEN("Set 1") {
@@ -24,8 +56,7 @@ SCENARIO("Challenge 1") {
     CHECK(message == "Cooking MC's like a pound of bacon");
     CHECK(key == 0x58);
   }
-  // GIVEN("Set 4") { CHECK(crack_file_4() == "Now that the party is
-  // jumping\n"); }
+  GIVEN("Set 4") { CHECK(crack_file_4() == "Now that the party is jumping\n"); }
   GIVEN("Set 5") {
     std::string const message{
         "Burning 'em, if you ain't quick and nimble\nI go crazy when "
@@ -41,6 +72,9 @@ SCENARIO("Challenge 1") {
     CHECK(from_bytes(from_hex(to_hex(to_bytes(message)))) == message);
     CHECK(from_bytes(from_base64(to_base64(to_bytes(message)))) == message);
     CHECK(37 == hamming_distance("this is a test", "wokka wokka!!!"));
-    CHECK("" == crack_file_6());
+    auto [key, decrypted] = crack_file_6();
+    CHECK(key == "Terminator X: Bring the noise");
+    CHECK(std::string_view{decrypted.c_str(), 24} ==
+          "I'm back and I'm ringin'");
   }
 }

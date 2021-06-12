@@ -79,6 +79,14 @@
     "xtree": "cpp",
     "xutility": "cpp",
     "span": "cpp",
-    "ranges": "cpp"
+    "ranges": "cpp",
+    "cstdarg": "cpp",
+    "cwctype": "cpp",
+    "*.tcc": "cpp",
+    "bitset": "cpp",
+    "memory_resource": "cpp",
+    "string_view": "cpp",
+    "shared_mutex": "cpp",
+    "cinttypes": "cpp"
   }
 }

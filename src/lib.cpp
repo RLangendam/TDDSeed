@@ -2,6 +2,7 @@
 
 #include <algorithm>
 #include <array>
+#include <boost/range/adaptor/filtered.hpp>
 #include <boost/range/adaptor/indexed.hpp>
 #include <boost/range/adaptor/sliced.hpp>
 #include <boost/range/adaptor/strided.hpp>
@@ -22,7 +23,6 @@
 #include <iomanip>
 #include <iostream>
 #include <iterator>
-#include <ranges>
 #include <set>
 #include <sstream>
 #include <tuple>
@@ -57,7 +57,8 @@ basic_ostream<E, T> &hex_encoding(basic_ostream<E, T> &stream) {
   return stream << setfill('0') << hex;
 }
 
-auto hex_output_iterator(auto &stream) {
+template <typename S>
+auto hex_output_iterator(S &stream) {
   return ostream_iterator<fixed_width_value<int, 2>>{stream << hex_encoding};
 }
 
@@ -81,7 +82,8 @@ struct repeated_iterator
   difference_type index{0};
 };
 
-string stream_to_string(auto callable) {
+template <typename C>
+string stream_to_string(C callable) {
   ostringstream stream;
   callable(stream);
   return stream.str();
@@ -112,7 +114,7 @@ class base64_sextet {
   base64_sextet() = default;
   static base64_sextet from_sextet(byte sextet) { return {sextet}; }
 
-  byte get_byte() const { return sextet; }
+  byte get_sextet_byte() const { return sextet; }
 
  private:
   base64_sextet(byte sextet) : sextet{sextet} {}
@@ -128,7 +130,7 @@ static string const base64_lookup{
 template <typename E, typename T>
 basic_ostream<E, T> &operator<<(basic_ostream<E, T> &stream,
                                 base64_sextet const &bs) {
-  return stream << base64_lookup[to_integer<size_t>(bs.get_byte())];
+  return stream << base64_lookup[to_integer<size_t>(bs.get_sextet_byte())];
 }
 
 template <typename E, typename T>
@@ -136,11 +138,11 @@ basic_istream<E, T> &operator>>(basic_istream<E, T> &stream,
                                 base64_sextet &bs) {
   char letter;
   stream >> letter;
-  auto const found{find(base64_lookup.begin(), base64_lookup.end(), letter)};
-  if (found == base64_lookup.end())
-    throw out_of_range{"Letter cannot be base64 decoded"};
-  bs = base64_sextet::from_sextet(
-      static_cast<byte>(distance(base64_lookup.begin(), found)));
+  bs = base64_sextet::from_sextet(static_cast<byte>(
+      letter == '\0' ? 0
+                     : distance(base64_lookup.begin(),
+                                find(base64_lookup.begin(), base64_lookup.end(),
+                                     letter))));
   return stream;
 }
 
@@ -178,7 +180,7 @@ struct sextet_iterator
   }
 
   bool operator==(sextet_iterator const &other) const {
-    return where == other.where && bit_index == other.bit_index;
+    return where == other.where;
   }
 
  private:
@@ -206,17 +208,17 @@ struct octet_iterator
   byte operator*() const noexcept {
     byte result;
     if (bit_index == 0) {
-      result = where->get_byte() << 2;
+      result = where->get_sextet_byte() << 2;
       auto const n{boost::next(where)};
-      if (n != end) result |= (n->get_byte() & byte{0b110000}) >> 4;
+      if (n != end) result |= (n->get_sextet_byte() & byte{0b110000}) >> 4;
     } else if (bit_index == 2) {
-      result = (where->get_byte() & byte{0b001111}) << 4;
+      result = (where->get_sextet_byte() & byte{0b001111}) << 4;
       auto const n{boost::next(where)};
-      if (n != end) result |= (n->get_byte() & byte{0b111100}) >> 2;
+      if (n != end) result |= (n->get_sextet_byte() & byte{0b111100}) >> 2;
     } else {  // bit_index == 4
-      result = (where->get_byte() & byte{0b000011}) << 6;
+      result = (where->get_sextet_byte() & byte{0b000011}) << 6;
       auto const n{boost::next(where)};
-      if (n != end) result |= n->get_byte();
+      if (n != end) result |= n->get_sextet_byte();
     }
     return result;
   }
@@ -229,7 +231,7 @@ struct octet_iterator
   }
 
   bool operator==(octet_iterator const &other) const {
-    return where == other.where && bit_index == other.bit_index;
+    return where == other.where;
   }
 
  private:
@@ -256,31 +258,29 @@ string hex_to_base64(string const &hex) {
   });
 }
 
-struct ci_hash {
-  size_t operator()(char c) const { return hash<int>{}(tolower(c)); }
-};
-
-auto get_frequencies(istream &stream) {
-  unordered_map<char, size_t, ci_hash> counts;
+auto get_frequencies(vector<byte> const &data) {
+  unordered_map<byte, size_t> counts;
   {
-    char c;
-    while (stream >> noskipws >> c) {
-      auto const found{counts.find(c)};
+    for (auto b : data) {
+      auto const found{counts.find(b)};
       if (found == counts.end())
-        counts.emplace(c, 1);
+        counts.emplace(b, 1);
       else
         ++found->second;
     }
   }
-  array<tuple<char, size_t>, 255> frequencies;
-  char i{0};
-  for (auto &[ch, cnt] : frequencies) {
-    ch = i++;
-    auto const found(counts.find(ch));
-    if (found == counts.end())
-      cnt = 0;
-    else
-      cnt = found->second;
+  array<tuple<byte, size_t>, numeric_limits<char>::max()> frequencies;
+  {
+    uint8_t i{0};
+    for (auto &[b, cnt] : frequencies) {
+      b = static_cast<byte>(i);
+      i++;
+      auto const found(counts.find(b));
+      if (found == counts.end())
+        cnt = 0;
+      else
+        cnt = found->second;
+    }
   }
   return frequencies;
 }
@@ -296,16 +296,12 @@ string hex_xor(string const &left, string const &right) {
   });
 }
 
-string decrypt(string const &message, char key) {
-  return stream_to_string([&](ostream &stream) {
-    using namespace boost;
-    using namespace range;
-    using namespace adaptors;
-    transform(hex_decoded(message), ostream_iterator<char>(stream),
-              [key = static_cast<byte>(key)](byte ch) {
-                return to_integer<char>(ch ^ key);
-              });
-  });
+auto decrypt(vector<byte> const &message, byte key) {
+  vector<byte> decrypted;
+  decrypted.reserve(message.size());
+  boost::range::transform(message, back_inserter(decrypted),
+                          [key](byte b) { return b ^ key; });
+  return decrypted;
 }
 
 template <typename T>
@@ -317,63 +313,80 @@ size_t calculate_score(T const &left, T const &right) {
 
 auto const &get_reference() {
   static bool initialized{false};
-  static decltype(get_frequencies(declval<istream &>())) reference;
+  static decltype(get_frequencies(declval<vector<byte> const &>())) reference;
   if (!initialized) {
-    ifstream file{"english.txt"};
-    reference = get_frequencies(file);
+    vector<byte> bytes;
+    {
+      wifstream file{"english.txt"};
+      boost::transform(boost::istream_range<wchar_t>(file >> noskipws) |
+                           boost::adaptors::filtered([](wchar_t c) {
+                             return c >= numeric_limits<uint8_t>::min() &&
+                                    c <= numeric_limits<uint8_t>::max();
+                           }),
+                       back_inserter(bytes),
+                       [](wchar_t c) { return static_cast<byte>(c); });
+    }
+    reference = get_frequencies(bytes);
     initialized = true;
   }
   return reference;
 }
 
-tuple<string, char> crack(string const &message) {
+tuple<vector<byte>, byte> crack_impl(vector<byte> const &message) {
   auto const &reference{get_reference()};
-  string best_decrypted;
+  vector<byte> best_decrypted;
   size_t max_score{0};
-  char best_key{0};
-  for (uint16_t key{0}; key <= numeric_limits<char>::max(); ++key) {
-    auto decrypted{decrypt(message, static_cast<char>(key))};
-    istringstream stream{decrypted};
-    auto const frequencies{get_frequencies(stream)};
+  byte best_key{0};
+  constexpr uint16_t max_key{numeric_limits<char>::max()};
+  for (uint16_t key{0}; key <= max_key; ++key) {
+    auto decrypted{decrypt(message, static_cast<byte>(key))};
+    auto const frequencies{get_frequencies(decrypted)};
     auto score{calculate_score(reference, frequencies)};
     if (score > max_score) {
       max_score = score;
       best_decrypted = move(decrypted);
-      best_key = static_cast<char>(key);
+      auto x = from_bytes(best_decrypted);
+      best_key = static_cast<byte>(key);
     }
   }
   return make_tuple(best_decrypted, best_key);
 }
 
-set<char> const &get_word_characters() {
-  static set<char> reference;
+tuple<string, char> crack(string const &message) {
+  auto const bytes{from_hex(message)};
+  auto const [cracked_bytes, key] = crack_impl(bytes);
+  return make_tuple(from_bytes(cracked_bytes), to_integer<char>(key));
+}
+
+set<byte> const &get_word_characters() {
+  static set<byte> reference;
   static bool initialized{false};
   if (!initialized) {
-    reference.emplace('\n');
-    reference.emplace(' ');
-    for (char c{'a'}; c <= 'z'; ++c) reference.emplace(c);
-    for (char c{'A'}; c <= 'Z'; ++c) reference.emplace(c);
+    reference.emplace(byte{'\n'});
+    reference.emplace(byte{' '});
+    for (uint8_t c{'a'}; c <= 'z'; ++c) reference.emplace(byte{c});
+    for (uint8_t c{'A'}; c <= 'Z'; ++c) reference.emplace(byte{c});
   }
   return reference;
 }
 
-string crack_messages(auto const &encrypted_messages) {
+auto crack_messages(vector<vector<byte>> const &encrypted_messages) {
   enum class state { unknown, discard, use };
 
-  return get<1>(transform_reduce(
+  return transform_reduce(
       execution::par, encrypted_messages.begin(), encrypted_messages.end(),
-      make_tuple(state::discard, string{}),
-      [](tuple<state, string> &&left, tuple<state, string> &&right) {
-        auto &[sl, ml] = left;
-        auto &[sr, mr] = right;
+      make_tuple(state::discard, vector<byte>{}, byte{0}),
+      [](auto &&left, auto &&right) {
+        auto &[sl, ml, kl] = left;
+        auto &[sr, mr, kr] = right;
         if (sl == state::discard || sr == state::use)
           return right;
         else if (sr == state::discard || sl == state::use)
           return left;
         else  // both sl and sr are state::unknown
         {
-          auto const is_english{[](string const &decrypted) {
-            thread_local vector<char> chars, difference;
+          auto const is_english{[](vector<byte> const &decrypted) {
+            thread_local vector<byte> chars, difference;
             chars.assign(decrypted.begin(), decrypted.end());
             sort(chars.begin(), chars.end());
             chars.erase(unique(chars.begin(), chars.end()), chars.end());
@@ -384,25 +397,26 @@ string crack_messages(auto const &encrypted_messages) {
             return difference.empty();
           }};
           if (is_english(ml))
-            return make_tuple(state::use, move(ml));
+            return make_tuple(state::use, move(ml), kl);
           else if (is_english(mr))
-            return make_tuple(state::use, move(mr));
+            return make_tuple(state::use, move(mr), kr);
           else
-            return make_tuple(state::discard, string{});
+            return make_tuple(state::discard, vector<byte>{}, byte{0});
         }
       },
-      [](string const &encrypted) {
-        return make_tuple(state::unknown, move(get<0>(crack(encrypted))));
-      }));
+      [](vector<byte> const &encrypted) {
+        return tuple_cat(make_tuple(state::unknown), crack_impl(encrypted));
+      });
 }
 
 string crack_file_4() {
-  ifstream file{"4.txt"};
-
-  array<string, 327> encrypted_messages;
-  boost::copy(boost::istream_range<string>(file), encrypted_messages.begin());
-
-  return crack_messages(encrypted_messages);
+  vector<vector<byte>> encrypted_messages;
+  {
+    ifstream file{"4.txt"};
+    boost::transform(boost::istream_range<string>(file),
+                     back_inserter(encrypted_messages), from_hex);
+  }
+  return from_bytes(get<1>(crack_messages(encrypted_messages)));
 }
 
 string encrypt(string const &message, string const &key) {
@@ -471,11 +485,13 @@ string to_base64(vector<byte> const &bytes) {
   });
 }
 
-auto from_base64_impl(auto &stream) {
+template <typename S>
+auto from_base64_impl(S &stream) {
   vector<byte> bytes;
-
-  boost::range::copy(as_octets(boost::istream_range<base64_sextet>(stream)),
-                     back_inserter(bytes));
+  vector<base64_sextet> sextets;
+  boost::copy(boost::istream_range<base64_sextet>(stream),
+              back_inserter(sextets));
+  boost::range::copy(as_octets(sextets), back_inserter(bytes));
   return bytes;
 }
 
@@ -484,7 +500,22 @@ vector<byte> from_base64(string const &message) {
   return from_base64_impl(stream);
 }
 
-string crack_file_6() {
+vector<vector<byte>> transpose(vector<byte> const &data, size_t stride) {
+  vector<vector<byte>> transposed;
+  transposed.reserve(data.size() / stride + 1);
+  boost::transform(boost::irange(stride), back_inserter(transposed),
+                   [&data, stride](size_t slice) {
+                     vector<byte> bytes;
+                     boost::copy(
+                         data | boost::adaptors::sliced(slice, data.size()) |
+                             boost::adaptors::strided(stride),
+                         back_inserter(bytes));
+                     return bytes;
+                   });
+  return transposed;
+}
+
+tuple<string, string> crack_file_6() {
   vector<byte> encrypted;
   {
     ifstream file{"6.txt"};
@@ -513,20 +544,34 @@ string crack_file_6() {
       });
   sort(key_sizes.begin(), key_sizes.end());
   auto const best_key_size{get<1>(key_sizes.front())};
-  vector<string> blocks;
-  blocks.reserve(encrypted.size() / best_key_size + 1);
-  boost::transform(
-      boost::irange(best_key_size), back_inserter(blocks),
-      [&encrypted, best_key_size](size_t slice) {
-        return stream_to_string(
-            [&encrypted, slice, best_key_size](ostream &stream) {
-              boost::transform(
-                  encrypted | boost::adaptors::sliced(slice, encrypted.size()) |
-                      boost::adaptors::strided(best_key_size),
-                  ostream_iterator<char>(stream), &to_integer<char>);
-            });
-      });
+  auto blocks{transpose(encrypted, best_key_size)};
   for (auto &block : blocks)
-    if (block.size() % 2) block.push_back(' ');
-  return crack_messages(blocks);
+    if (block.size() % 2) block.emplace_back();
+
+  vector<tuple<vector<byte>, byte>> decrypted;
+  boost::transform(blocks, back_inserter(decrypted), crack_impl);
+  ostringstream key_stream;
+  vector<vector<byte>> decrypted_blocks;
+  for (auto &[d, k] : decrypted) {
+    key_stream << to_integer<char>(k);
+    decrypted_blocks.emplace_back(move(d));
+  }
+
+  auto const shortest_block_size{
+      min_element(decrypted_blocks.begin(), decrypted_blocks.end(),
+                  [](auto const &left, auto const &right) {
+                    return left.size() < right.size();
+                  })
+          ->size()};
+
+  vector<byte> decrypted2;
+  decrypted2.reserve(
+      accumulate(decrypted_blocks.begin(), decrypted_blocks.end(), 0ull,
+                 [](auto m, auto const &b) { return m + b.size(); }));
+  for (auto i{0u}; i < shortest_block_size; ++i)
+    for (auto const &b : decrypted_blocks) {
+      decrypted2.emplace_back(b[i]);
+    }
+
+  return make_tuple(key_stream.str(), from_bytes(decrypted2));
 }
