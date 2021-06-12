@@ -6,6 +6,7 @@
 #include <string_view>
 
 #include "lib.h"
+#include "lib_crypto.h"
 
 namespace std {
 
@@ -74,6 +75,11 @@ SCENARIO("Challenge 1") {
     CHECK(37 == hamming_distance("this is a test", "wokka wokka!!!"));
     auto [key, decrypted] = crack_file_6();
     CHECK(key == "Terminator X: Bring the noise");
+    CHECK(std::string_view{decrypted.c_str(), 24} ==
+          "I'm back and I'm ringin'");
+  }
+  GIVEN("Set 7") {
+    auto const decrypted{decrypt_file_7()};
     CHECK(std::string_view{decrypted.c_str(), 24} ==
           "I'm back and I'm ringin'");
   }

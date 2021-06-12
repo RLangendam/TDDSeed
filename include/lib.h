@@ -17,3 +17,6 @@ std::string to_hex(std::vector<std::byte> const &bytes);
 std::vector<std::byte> from_hex(std::string const &message);
 std::string to_base64(std::vector<std::byte> const &bytes);
 std::vector<std::byte> from_base64(std::string const &message);
+std::vector<std::vector<std::byte>> read_file_lines(
+    std::string const &filename,
+    std::vector<std::byte> (*decoder)(std::string const &));

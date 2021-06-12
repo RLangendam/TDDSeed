@@ -409,13 +409,17 @@ auto crack_messages(vector<vector<byte>> const &encrypted_messages) {
       });
 }
 
+vector<vector<byte>> read_file_lines(string const &filename,
+                                     vector<byte> (*decoder)(string const &)) {
+  vector<vector<byte>> lines;
+  ifstream file{filename};
+  boost::transform(boost::istream_range<string>(file), back_inserter(lines),
+                   decoder);
+  return lines;
+}
+
 string crack_file_4() {
-  vector<vector<byte>> encrypted_messages;
-  {
-    ifstream file{"4.txt"};
-    boost::transform(boost::istream_range<string>(file),
-                     back_inserter(encrypted_messages), from_hex);
-  }
+  auto encrypted_messages{read_file_lines("4.txt", &from_hex)};
   return from_bytes(get<1>(crack_messages(encrypted_messages)));
 }
 
