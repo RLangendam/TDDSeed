@@ -332,6 +332,41 @@ auto const &get_reference() {
   return reference;
 }
 
+auto get_relative_frequencies(
+    array<tuple<byte, size_t>, numeric_limits<char>::max()> const &data) {
+  array<float, numeric_limits<char>::max()> relative_frequencies;
+  auto const total{
+      accumulate(data.begin(), data.end(), 0ull,
+                 [](size_t memo, tuple<byte, size_t> const &element) {
+                   return memo + get<1>(element);
+                 })};
+  boost::transform(
+      data, relative_frequencies.begin(),
+      [total = static_cast<float>(total)](tuple<byte, size_t> const &element) {
+        return get<1>(element) / total;
+      });
+  sort(relative_frequencies.begin(), relative_frequencies.end());
+  return relative_frequencies;
+}
+
+float spectral_similarity_to_english(vector<byte> const &data) {
+  static array<float, numeric_limits<char>::max()> relative_frequencies;
+  static bool initialized{false};
+  if (!initialized) {
+    relative_frequencies = get_relative_frequencies(get_reference());
+  }
+
+  auto const relative_data_frequencies =
+      get_relative_frequencies(get_frequencies(data));
+  return boost::accumulate(
+      boost::combine(relative_frequencies, relative_data_frequencies), 0.f,
+      [](float memo, auto const &p) {
+        auto const &[l, r] = p;
+        auto const dist{l - r};
+        return memo + dist * dist;
+      });
+}
+
 tuple<vector<byte>, byte> crack_impl(vector<byte> const &message) {
   auto const &reference{get_reference()};
   vector<byte> best_decrypted;
@@ -578,4 +613,15 @@ tuple<string, string> crack_file_6() {
     }
 
   return make_tuple(key_stream.str(), from_bytes(decrypted2));
+}
+
+tuple<size_t, float> crack_file_8() {
+  auto const lines{read_file_lines("8.txt", &from_hex)};
+  vector<float> similarities;
+  similarities.reserve(lines.size());
+  transform(lines.begin(), lines.end(), back_inserter(similarities),
+            &spectral_similarity_to_english);
+  auto const minimum{min_element(similarities.begin(), similarities.end())};
+  auto const index{distance(similarities.begin(), minimum)};
+  return make_tuple(index, *minimum);
 }

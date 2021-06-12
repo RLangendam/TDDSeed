@@ -83,4 +83,9 @@ SCENARIO("Challenge 1") {
     CHECK(std::string_view{decrypted.c_str(), 24} ==
           "I'm back and I'm ringin'");
   }
+  GIVEN("Set 8") {
+    auto const [index, similarity] = crack_file_8();
+    CHECK(132 == index);
+    CHECK(similarity == Approx(0.00967f).margin(0.001f));
+  }
 }
