@@ -285,6 +285,16 @@ auto get_frequencies(vector<byte> const &data) {
   return frequencies;
 }
 
+vector<byte> hex_xor(vector<byte> const &left, vector<byte> const &right) {
+  vector<byte> result;
+  result.reserve(left.size());
+  using namespace boost;
+  range::transform(
+      combine(left, right), back_inserter(result),
+      [](auto const &p) { return boost::get<0>(p) ^ boost::get<1>(p); });
+  return result;
+}
+
 string hex_xor(string const &left, string const &right) {
   return stream_to_string([&](ostream &stream) {
     using namespace boost;

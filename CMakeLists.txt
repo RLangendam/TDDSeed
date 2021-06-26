@@ -40,6 +40,7 @@ configure_file(${CMAKE_CURRENT_SOURCE_DIR}/4.txt ${CMAKE_CURRENT_BINARY_DIR} COP
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/6.txt ${CMAKE_CURRENT_BINARY_DIR} COPYONLY)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/7.txt ${CMAKE_CURRENT_BINARY_DIR} COPYONLY)
 configure_file(${CMAKE_CURRENT_SOURCE_DIR}/8.txt ${CMAKE_CURRENT_BINARY_DIR} COPYONLY)
+configure_file(${CMAKE_CURRENT_SOURCE_DIR}/10.txt ${CMAKE_CURRENT_BINARY_DIR} COPYONLY)
 
 target_compile_features(lib PUBLIC cxx_std_20)
 target_compile_features(app PUBLIC cxx_std_20)

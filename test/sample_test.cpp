@@ -94,4 +94,10 @@ SCENARIO("Set 2") {
   GIVEN("Challenge 9") {
     CHECK("YELLOW SUBMARINE\x04\x04\x04\x04" == pkcs7("YELLOW SUBMARINE", 20));
   }
+
+  GIVEN("Challenge 10") {
+    auto const decrypted{decrypt_file_10()};
+    CHECK(std::string_view{decrypted.c_str(), 24} ==
+          "I'm back and I'm ringin'");
+    }
 }
