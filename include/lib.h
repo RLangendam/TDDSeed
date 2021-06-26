@@ -29,6 +29,11 @@ std::vector<std::byte> aes_decrypt(
     std::vector<std::byte> const &key, std::vector<std::byte> const &iv,
     std::vector<std::byte> const &ctext,
     std::optional<std::size_t> const &padding = std::nullopt);
+std::vector<std::byte> aes_encrypt(
+    std::vector<std::byte> const &key, std::vector<std::byte> const &iv,
+    std::vector<std::byte> const &ptext,
+    std::optional<std::size_t> const &padding = std::nullopt);
 std::string decrypt_file_7();
 std::string pkcs7(std::string const &data, std::size_t padding_size);
 std::string decrypt_file_10();
+std::vector<std::byte> encrypt_file_10(std::string const &decrypted);

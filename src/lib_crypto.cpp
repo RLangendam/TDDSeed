@@ -22,20 +22,21 @@ void initialize() {
   EVP_add_cipher(EVP_aes_128_ecb());
 }
 
-void aes_encrypt(vector<byte> const& key, vector<byte> const& iv,
-                 vector<byte> const& ptext, vector<byte>& ctext,
-                 optional<size_t> const& padding) {
+vector<byte> aes_encrypt(vector<byte> const& key, vector<byte> const& iv,
+                         vector<byte> const& ptext,
+                         optional<size_t> const& padding) {
   initialize();
   EVP_CIPHER_CTX_free_ptr ctx(EVP_CIPHER_CTX_new(), ::EVP_CIPHER_CTX_free);
 
   int rc =
-      EVP_EncryptInit_ex(ctx.get(), EVP_aes_256_cbc(), NULL,
+      EVP_EncryptInit_ex(ctx.get(), EVP_aes_128_ecb(), NULL,
                          reinterpret_cast<unsigned char const*>(key.data()),
                          reinterpret_cast<unsigned char const*>(iv.data()));
   if (rc != 1) throw std::runtime_error("EVP_EncryptInit_ex failed");
   if (padding.has_value()) {
     EVP_CIPHER_CTX_set_padding(ctx.get(), padding.value());
   }
+  vector<byte> ctext;
   ctext.resize(ptext.size() + iv.size());
   int out_len1 = (int)ctext.size();
 
@@ -52,6 +53,7 @@ void aes_encrypt(vector<byte> const& key, vector<byte> const& iv,
   if (rc != 1) throw std::runtime_error("EVP_EncryptFinal_ex failed");
 
   ctext.resize(out_len1 + out_len2);
+  return ctext;
 }
 
 vector<byte> aes_decrypt(vector<byte> const& key, vector<byte> const& iv,
