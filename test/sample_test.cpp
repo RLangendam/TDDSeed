@@ -6,8 +6,6 @@
 #include <string_view>
 
 #include "lib.h"
-#include "lib_crypto.h"
-
 namespace std {
 
 template <typename E, typename T>
@@ -39,26 +37,28 @@ basic_ostream<C, E>& operator<<(basic_ostream<C, E>& stream,
 
 }  // namespace std
 
-SCENARIO("Challenge 1") {
-  GIVEN("Set 1") {
+SCENARIO("Set 1") {
+  GIVEN("Challenge 1") {
     CHECK(
         "SSdtIGtpbGxpbmcgeW91ciBicmFpbiBsaWtlIGEgcG9pc29ub3VzIG11c2hyb29t" ==
         hex_to_base64("49276d206b696c6c696e6720796f757220627261696e206c696b6520"
                       "6120706f69736f6e6f7573206d757368726f6f6d"));
   }
-  GIVEN("Set 2") {
+  GIVEN("Challenge 2") {
     CHECK("746865206b696420646f6e277420706c6179" ==
           hex_xor("1c0111001f010100061a024b53535009181c",
                   "686974207468652062756c6c277320657965"));
   }
-  GIVEN("Set 3") {
+  GIVEN("Challenge 3") {
     auto const [message, key] = crack(
         "1b37373331363f78151b7f2b783431333d78397828372d363c78373e783a393b3736");
     CHECK(message == "Cooking MC's like a pound of bacon");
     CHECK(key == 0x58);
   }
-  GIVEN("Set 4") { CHECK(crack_file_4() == "Now that the party is jumping\n"); }
-  GIVEN("Set 5") {
+  GIVEN("Challenge 4") {
+    CHECK(crack_file_4() == "Now that the party is jumping\n");
+  }
+  GIVEN("Challenge 5") {
     std::string const message{
         "Burning 'em, if you ain't quick and nimble\nI go crazy when "
         "I hear a cymbal"};
@@ -67,7 +67,7 @@ SCENARIO("Challenge 1") {
           "2765272a282b2f20430a652e2c652a3124333a653e2b2027630c692b202831652863"
           "26302e27282f");
   }
-  GIVEN("Set 6") {
+  GIVEN("Challenge 6") {
     std::string const message{"Don't change me, please!"};
     CHECK(from_bytes(to_bytes(message)) == message);
     CHECK(from_bytes(from_hex(to_hex(to_bytes(message)))) == message);
@@ -78,14 +78,20 @@ SCENARIO("Challenge 1") {
     CHECK(std::string_view{decrypted.c_str(), 24} ==
           "I'm back and I'm ringin'");
   }
-  GIVEN("Set 7") {
+  GIVEN("Challenge 7") {
     auto const decrypted{decrypt_file_7()};
     CHECK(std::string_view{decrypted.c_str(), 24} ==
           "I'm back and I'm ringin'");
   }
-  GIVEN("Set 8") {
+  GIVEN("Challenge 8") {
     auto const [index, similarity] = crack_file_8();
     CHECK(132 == index);
     CHECK(similarity == Approx(0.00967f).margin(0.001f));
+  }
+}
+
+SCENARIO("Set 2") {
+  GIVEN("Challenge 9") {
+    CHECK("YELLOW SUBMARINE\x04\x04\x04\x04" == pkcs7("YELLOW SUBMARINE", 20));
   }
 }

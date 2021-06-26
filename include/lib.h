@@ -21,3 +21,5 @@ std::vector<std::vector<std::byte>> read_file_lines(
     std::string const &filename,
     std::vector<std::byte> (*decoder)(std::string const &));
 std::tuple<std::size_t, float> crack_file_8();
+std::string decrypt_file_7();
+std::string pkcs7(std::string const &data, std::size_t padding_size);

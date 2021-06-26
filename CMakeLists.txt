@@ -13,7 +13,7 @@ find_package(FakeIt CONFIG REQUIRED)
 find_package(Boost CONFIG REQUIRED)
 find_package(OpenSSL REQUIRED)
 
-add_library(lib "src/lib.cpp" "include/lib.h" "src/lib_crypto.cpp" "include/lib_crypto.h")
+add_library(lib "src/lib.cpp" "include/lib.h" "src/lib_crypto.cpp" "src/lib2.cpp")
 
 target_link_libraries(lib PUBLIC Boost::boost OpenSSL::Crypto)
 

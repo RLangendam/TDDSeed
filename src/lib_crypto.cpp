@@ -1,5 +1,3 @@
-#include "lib_crypto.h"
-
 #include <openssl/err.h>
 #include <openssl/evp.h>
 #include <openssl/opensslv.h>
